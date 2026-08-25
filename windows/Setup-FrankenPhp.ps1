@@ -186,6 +186,9 @@ Write-Step 'Installing the PHP Redis extension'
     -InstallPath $InstallPath `
     -ExtensionVersion $RedisExtensionVersion
 
+Write-Step 'Publishing the FrankenPHP runtime environment'
+& (Join-Path $scriptPath 'Set-FrankenPhpSystemPath.ps1') -InstallPath $InstallPath
+
 Write-Step 'Validating the FrankenPHP runtime'
 & (Join-Path $scriptPath 'Test-FrankenPhp.ps1') `
     -FrankenPhp $frankenPhp `

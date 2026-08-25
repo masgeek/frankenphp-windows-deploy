@@ -58,6 +58,12 @@ try {
     }
 
     Copy-Item $redisExtension (Join-Path $extensionPath 'php_redis.dll') -Force
+
+    Get-ChildItem $extractPath -Filter '*.dll' -File -Recurse |
+        Where-Object { $_.Name -ne 'php_redis.dll' } |
+        ForEach-Object {
+            Copy-Item $_.FullName (Join-Path $InstallPath $_.Name) -Force
+        }
 } finally {
     Remove-Item $archive -Force -ErrorAction SilentlyContinue
     Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue

@@ -33,4 +33,6 @@ Every value can also be passed directly as a script parameter. Explicit paramete
 .\deploy\windows\Install-FrankenPhpService.ps1 -Uninstall
 ```
 
-The setup installs FrankenPHP and required PHP extensions, updates runtime configuration, validates Laravel, and configures the Servy service. It does not install application dependencies, build assets, run migrations, modify `.env`, or modify IIS.
+The setup installs FrankenPHP and required PHP extensions, including Redis and its companion DLLs, updates runtime configuration, validates Laravel, and configures the Servy service. It also puts the selected FrankenPHP directory first in the machine `PATH` and sets `FRANKENPHP_EXT_DIR` for new processes. Open a new terminal after setup before running commands such as `cr:dev`.
+
+It does not install application dependencies, build assets, run migrations, modify `.env`, or modify IIS.
