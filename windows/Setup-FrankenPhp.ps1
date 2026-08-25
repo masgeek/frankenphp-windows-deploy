@@ -11,6 +11,7 @@ param(
     [ValidateRange(1, 10000)]
     [int] $MaxRequests = 250,
     [string] $SqlServerDriverVersion = '5.13.3',
+    [string] $RedisExtensionVersion = '6.3.0',
     [switch] $Development,
     [switch] $OpenFirewall,
     [switch] $ForceFrankenPhpDownload
@@ -149,17 +150,22 @@ if (-not (Test-Path $frankenPhp -PathType Leaf) -or -not (Test-Path $php -PathTy
 
 Invoke-CheckedCommand $frankenPhp @('version')
 
+Write-Step 'Updating PHP and Caddy configuration'
+& (Join-Path $scriptPath 'Update-FrankenPhpPhpIni.ps1') -InstallPath $InstallPath
+Copy-Item (Join-Path $scriptPath 'Caddyfile') $caddyFile -Force
+
+$env:PHPRC = $phpIni
+$env:FRANKENPHP_EXT_DIR = Join-Path $InstallPath 'ext'
+
 Write-Step 'Installing Microsoft SQL Server PHP drivers'
 & (Join-Path $scriptPath 'Install-FrankenPhpSqlServerDrivers.ps1') `
     -InstallPath $InstallPath `
     -DriverVersion $SqlServerDriverVersion
 
-Write-Step 'Installing PHP and Caddy configuration'
-Copy-Item (Join-Path $scriptPath 'php.ini') $phpIni -Force
-Copy-Item (Join-Path $scriptPath 'Caddyfile') $caddyFile -Force
-
-$env:PHPRC = $phpIni
-$env:FRANKENPHP_EXT_DIR = Join-Path $InstallPath 'ext'
+Write-Step 'Installing the PHP Redis extension'
+& (Join-Path $scriptPath 'Install-FrankenPhpRedisExtension.ps1') `
+    -InstallPath $InstallPath `
+    -ExtensionVersion $RedisExtensionVersion
 
 Write-Step 'Validating the FrankenPHP runtime'
 & (Join-Path $scriptPath 'Test-FrankenPhp.ps1') `
