@@ -1,10 +1,21 @@
 param(
     [string] $FrankenPhp = 'C:\Program Files\FrankenPHP\frankenphp.exe',
-    [string] $AppPath = 'C:\fee-processor',
-    [string] $PhpIni = ''
+    [string] $AppPath = 'C:\app',
+    [string] $PhpIni = '',
+    [string] $ConfigPath = (Join-Path $PSScriptRoot '..\..\frankenphp-deploy.psd1')
 )
 
 $ErrorActionPreference = 'Stop'
+
+if (
+    -not $PSBoundParameters.ContainsKey('AppPath') -and
+    (Test-Path $ConfigPath -PathType Leaf)
+) {
+    $deploymentConfig = Import-PowerShellDataFile $ConfigPath
+    if ($deploymentConfig.ContainsKey('AppPath')) {
+        $AppPath = $deploymentConfig.AppPath
+    }
+}
 
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 $appPathCache = Join-Path $scriptPath '.cache'

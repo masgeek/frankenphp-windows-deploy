@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string] $AppPath = 'C:\fee-processor',
+    [string] $AppPath = 'C:\app',
     [string] $InstallPath = 'C:\Program Files\FrankenPHP',
     [ValidateRange(1, 65535)]
     [int] $Port = 8001,
@@ -10,6 +10,12 @@ param(
     [int] $Workers = 2,
     [ValidateRange(1, 10000)]
     [int] $MaxRequests = 250,
+    [string] $ServiceName = 'laravel-frankenphp',
+    [string] $ServiceDisplayName = 'Laravel - FrankenPHP',
+    [string] $ServiceDescription = 'FrankenPHP and Laravel Octane service.',
+    [string] $FirewallRuleName = 'Laravel FrankenPHP',
+    [string] $HealthPath = '/up',
+    [string] $ConfigPath = (Join-Path $PSScriptRoot '..\..\frankenphp-deploy.psd1'),
     [switch] $Development,
     [switch] $OpenFirewall,
     [switch] $Uninstall
@@ -35,9 +41,21 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
     throw 'Run this script from an elevated PowerShell session.'
 }
 
+if (Test-Path $ConfigPath -PathType Leaf) {
+    $deploymentConfig = Import-PowerShellDataFile $ConfigPath
+    foreach ($parameterName in @(
+        'AppPath', 'InstallPath', 'Port', 'AdminPort', 'Workers', 'MaxRequests',
+        'ServiceName', 'ServiceDisplayName', 'ServiceDescription', 'FirewallRuleName', 'HealthPath'
+    )) {
+        if (-not $PSBoundParameters.ContainsKey($parameterName) -and $deploymentConfig.ContainsKey($parameterName)) {
+            Set-Variable -Name $parameterName -Value $deploymentConfig[$parameterName]
+        }
+    }
+}
+
 $InstallPath = [IO.Path]::GetFullPath($InstallPath)
 $legacyServiceExecutable = Join-Path $InstallPath 'frankenphp-service.exe'
-$serviceId = 'fee-processor-frankenphp'
+$serviceId = $ServiceName
 $servyCommand = Get-Command servy-cli -ErrorAction SilentlyContinue
 if (-not $servyCommand) {
     throw 'Servy must be installed separately and servy-cli must be available in PATH.'
@@ -167,8 +185,8 @@ try {
     Invoke-CheckedCommand $servyCli @(
         'install',
         "--name=$serviceId",
-        '--displayName=Fee Processor - FrankenPHP',
-        '--description=FrankenPHP and Laravel Octane service for the fee processor API.',
+        "--displayName=$ServiceDisplayName",
+        "--description=$ServiceDescription",
         "--path=$frankenPhp",
         "--startupDir=$AppPath",
         '--startupType=Automatic',
@@ -194,13 +212,13 @@ try {
 }
 
 if ($OpenFirewall) {
-    $firewallRule = Get-NetFirewallRule -DisplayName 'Fee Processor FrankenPHP' -ErrorAction SilentlyContinue
+    $firewallRule = Get-NetFirewallRule -DisplayName $FirewallRuleName -ErrorAction SilentlyContinue
     if ($firewallRule) {
-        Remove-NetFirewallRule -DisplayName 'Fee Processor FrankenPHP'
+        Remove-NetFirewallRule -DisplayName $FirewallRuleName
     }
 
     New-NetFirewallRule `
-        -DisplayName 'Fee Processor FrankenPHP' `
+        -DisplayName $FirewallRuleName `
         -Direction Inbound `
         -Action Allow `
         -Protocol TCP `
@@ -209,7 +227,8 @@ if ($OpenFirewall) {
 
 Invoke-CheckedCommand $servyCli @('start', "--name=$serviceId", '--quiet')
 
-$healthUrl = "http://127.0.0.1:$Port/up"
+$healthPathValue = '/' + $HealthPath.TrimStart('/')
+$healthUrl = "http://127.0.0.1:$Port$healthPathValue"
 for ($attempt = 1; $attempt -le 15; $attempt++) {
     Start-Sleep -Seconds 1
 

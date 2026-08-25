@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string] $AppPath = 'C:\fee-processor',
+    [string] $AppPath = 'C:\app',
     [string] $InstallPath = 'C:\Program Files\FrankenPHP',
     [ValidateRange(1, 65535)]
     [int] $Port = 8001,
@@ -12,6 +12,12 @@ param(
     [int] $MaxRequests = 250,
     [string] $SqlServerDriverVersion = '5.13.3',
     [string] $RedisExtensionVersion = '6.3.0',
+    [string] $ServiceName = 'laravel-frankenphp',
+    [string] $ServiceDisplayName = 'Laravel - FrankenPHP',
+    [string] $ServiceDescription = 'FrankenPHP and Laravel Octane service.',
+    [string] $FirewallRuleName = 'Laravel FrankenPHP',
+    [string] $HealthPath = '/up',
+    [string] $ConfigPath = (Join-Path $PSScriptRoot '..\..\frankenphp-deploy.psd1'),
     [switch] $Development,
     [switch] $OpenFirewall,
     [switch] $ForceFrankenPhpDownload
@@ -49,6 +55,19 @@ function Invoke-CheckedCommand {
 
 Assert-Administrator
 
+if (Test-Path $ConfigPath -PathType Leaf) {
+    $deploymentConfig = Import-PowerShellDataFile $ConfigPath
+    foreach ($parameterName in @(
+        'AppPath', 'InstallPath', 'Port', 'AdminPort', 'Workers', 'MaxRequests',
+        'SqlServerDriverVersion', 'RedisExtensionVersion', 'ServiceName',
+        'ServiceDisplayName', 'ServiceDescription', 'FirewallRuleName', 'HealthPath'
+    )) {
+        if (-not $PSBoundParameters.ContainsKey($parameterName) -and $deploymentConfig.ContainsKey($parameterName)) {
+            Set-Variable -Name $parameterName -Value $deploymentConfig[$parameterName]
+        }
+    }
+}
+
 if ($Port -eq $AdminPort) {
     throw 'The public and admin ports must be different.'
 }
@@ -78,7 +97,7 @@ $php = Join-Path $InstallPath 'php.exe'
 $phpIni = Join-Path $InstallPath 'php.ini'
 $caddyFile = Join-Path $InstallPath 'Caddyfile'
 $legacyServiceExecutable = Join-Path $InstallPath 'frankenphp-service.exe'
-$serviceId = 'fee-processor-frankenphp'
+$serviceId = $ServiceName
 
 if (-not (Test-Path $artisan -PathType Leaf)) {
     throw "Laravel was not found at $AppPath"
@@ -181,6 +200,11 @@ Write-Step 'Installing and starting the FrankenPHP service'
     -AdminPort $AdminPort `
     -Workers $Workers `
     -MaxRequests $MaxRequests `
+    -ServiceName $ServiceName `
+    -ServiceDisplayName $ServiceDisplayName `
+    -ServiceDescription $ServiceDescription `
+    -FirewallRuleName $FirewallRuleName `
+    -HealthPath $HealthPath `
     -Development:$Development `
     -OpenFirewall:$OpenFirewall
 

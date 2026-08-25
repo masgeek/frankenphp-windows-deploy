@@ -4,14 +4,14 @@
 
 	frankenphp {
 		worker {
-			file "{$APP_PUBLIC_PATH:C:/fee-processor/public}/frankenphp-worker.php"
+			file "{$APP_PUBLIC_PATH:C:/app/public}/frankenphp-worker.php"
 			num {$OCTANE_WORKERS:2}
 		}
 	}
 }
 
 :{$OCTANE_PORT:8001} {
-	root * "{$APP_PUBLIC_PATH:C:/fee-processor/public}"
+	root * "{$APP_PUBLIC_PATH:C:/app/public}"
 	encode zstd br gzip
 
 	log {
