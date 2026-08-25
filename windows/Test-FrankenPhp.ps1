@@ -42,7 +42,9 @@ $requiredModules = @(
     'openssl',
     'PDO',
     'pdo_pgsql',
+    'pdo_sqlite',
     'pdo_sqlsrv',
+    'sqlite3',
     'sqlsrv'
 )
 
