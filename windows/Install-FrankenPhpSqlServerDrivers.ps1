@@ -4,6 +4,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+[Net.ServicePointManager]::SecurityProtocol = `
+    [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
 $php = Join-Path $InstallPath 'php.exe'
 $extensionPath = Join-Path $InstallPath 'ext'
@@ -31,7 +33,7 @@ $extractPath = Join-Path $env:TEMP "msphpsql-$DriverVersion-$PID"
 $downloadUrl = "https://github.com/microsoft/msphpsql/releases/download/v$DriverVersion/Windows_$($DriverVersion)RTW.zip"
 
 try {
-    Invoke-WebRequest -Uri $downloadUrl -OutFile $archive
+    Invoke-WebRequest -UseBasicParsing -Uri $downloadUrl -OutFile $archive
     Expand-Archive -Path $archive -DestinationPath $extractPath -Force
 
     $driverDirectory = Join-Path $extractPath 'Windows'

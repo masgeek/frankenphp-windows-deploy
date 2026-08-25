@@ -18,6 +18,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+[Net.ServicePointManager]::SecurityProtocol = `
+    [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
 function Write-Step([string] $Message) {
     Write-Host "`n==> $Message" -ForegroundColor Cyan
@@ -131,7 +133,10 @@ if ($ForceFrankenPhpDownload -or -not (Test-Path $frankenPhp -PathType Leaf)) {
 
     try {
         New-Item -ItemType Directory -Path $InstallPath -Force | Out-Null
-        Invoke-WebRequest 'https://github.com/php/frankenphp/releases/latest/download/frankenphp-windows-x86_64.zip' -OutFile $archive
+        Invoke-WebRequest `
+            -UseBasicParsing `
+            -Uri 'https://github.com/php/frankenphp/releases/latest/download/frankenphp-windows-x86_64.zip' `
+            -OutFile $archive
         Expand-Archive -Path $archive -DestinationPath $InstallPath -Force
     } finally {
         Remove-Item $archive -Force -ErrorAction SilentlyContinue
