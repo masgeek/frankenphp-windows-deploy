@@ -1,0 +1,27 @@
+{
+	admin 127.0.0.1:{$OCTANE_ADMIN_PORT:2019}
+	auto_https off
+
+	frankenphp {
+		worker {
+			file "{$APP_PUBLIC_PATH:C:/fee-processor/public}/frankenphp-worker.php"
+			num {$OCTANE_WORKERS:2}
+		}
+	}
+}
+
+:{$OCTANE_PORT:8080} {
+	root * "{$APP_PUBLIC_PATH:C:/fee-processor/public}"
+	encode zstd br gzip
+
+	log {
+		level WARN
+		format json
+	}
+
+	php_server {
+		index frankenphp-worker.php
+		try_files {path} frankenphp-worker.php
+		resolve_root_symlink
+	}
+}
