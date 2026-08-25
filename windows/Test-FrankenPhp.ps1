@@ -63,6 +63,7 @@ $requiredModules = @(
     'pdo_pgsql',
     'pdo_sqlite',
     'pdo_sqlsrv',
+    'redis',
     'sqlite3',
     'sqlsrv'
 )
