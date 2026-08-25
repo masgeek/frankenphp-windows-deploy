@@ -6,6 +6,24 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+$scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
+$appPathCache = Join-Path $scriptPath '.cache'
+if (-not $PSBoundParameters.ContainsKey('AppPath')) {
+    if (Test-Path $appPathCache -PathType Leaf) {
+        $cachedAppPath = [IO.File]::ReadAllText($appPathCache).Trim()
+        if (-not [string]::IsNullOrWhiteSpace($cachedAppPath)) {
+            $AppPath = $cachedAppPath
+        }
+    }
+
+    $selectedAppPath = Read-Host "Application directory [$AppPath]"
+    if (-not [string]::IsNullOrWhiteSpace($selectedAppPath)) {
+        $AppPath = $selectedAppPath
+    }
+}
+
+$AppPath = [IO.Path]::GetFullPath($AppPath)
+
 if (-not (Test-Path $FrankenPhp -PathType Leaf)) {
     throw "FrankenPHP was not found at $FrankenPhp"
 }
@@ -38,6 +56,7 @@ if ($LASTEXITCODE -ne 0) {
 $requiredModules = @(
     'curl',
     'fileinfo',
+    'intl',
     'mbstring',
     'openssl',
     'PDO',
@@ -57,5 +76,7 @@ if ($missingModules.Count -gt 0) {
 if ($LASTEXITCODE -ne 0) {
     throw 'Laravel failed to boot with FrankenPHP.'
 }
+
+[IO.File]::WriteAllText($appPathCache, $AppPath, [Text.UTF8Encoding]::new($false))
 
 Write-Host 'FrankenPHP is ready for application smoke testing.' -ForegroundColor Green
