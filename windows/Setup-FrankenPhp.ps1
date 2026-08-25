@@ -3,9 +3,9 @@ param(
     [string] $AppPath = 'C:\fee-processor',
     [string] $InstallPath = 'C:\Program Files\FrankenPHP',
     [ValidateRange(1, 65535)]
-    [int] $Port = 8080,
+    [int] $Port = 8001,
     [ValidateRange(1, 65535)]
-    [int] $AdminPort = 2019,
+    [int] $AdminPort = 2020,
     [ValidateRange(1, 64)]
     [int] $Workers = 2,
     [ValidateRange(1, 10000)]

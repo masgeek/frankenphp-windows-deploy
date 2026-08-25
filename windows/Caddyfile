@@ -1,5 +1,5 @@
 {
-	admin 127.0.0.1:{$OCTANE_ADMIN_PORT:2019}
+	admin 127.0.0.1:{$OCTANE_ADMIN_PORT:2020}
 	auto_https off
 
 	frankenphp {
@@ -10,7 +10,7 @@
 	}
 }
 
-:{$OCTANE_PORT:8080} {
+:{$OCTANE_PORT:8001} {
 	root * "{$APP_PUBLIC_PATH:C:/fee-processor/public}"
 	encode zstd br gzip
 
