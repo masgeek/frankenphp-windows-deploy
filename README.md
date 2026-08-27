@@ -31,13 +31,14 @@ The default FrankenPHP installation directory is `C:\FrankenPHP`, avoiding prote
 ## Usage
 
 ```powershell
+.\deploy\windows\Install-FrankenPhp.ps1
 .\deploy\windows\Setup-FrankenPhp.ps1
 .\deploy\windows\Install-FrankenPhpService.ps1
 .\deploy\windows\Install-FrankenPhpService.ps1 -Uninstall
 .\deploy\windows\Uninstall-FrankenPhp.ps1
 ```
 
-The setup installs FrankenPHP and required PHP extensions, including Redis and its companion DLLs, updates runtime configuration, validates Laravel, and configures the Servy service. It also puts the selected FrankenPHP directory first in the machine `PATH` and sets `FRANKENPHP_EXT_DIR` for new processes. Open a new terminal after setup before running commands such as `cr:dev`.
+`Install-FrankenPhp.ps1` only installs and validates the FrankenPHP runtime, caches its install path, and publishes it to the system PATH. Run it before `Setup-FrankenPhp.ps1`. The setup configures the application, installs required PHP extensions including Redis and its companion DLLs, updates runtime configuration, validates Laravel, and configures the Servy service. Open a new terminal after setup before running commands such as `cr:dev`.
 
 `Uninstall-FrankenPhp.ps1` removes the FrankenPHP service, firewall rule, machine environment settings, and FrankenPHP runtime directory. It retains the setup cache and does not modify the Laravel application. Use `-KeepInstallPath` to retain the runtime directory. Verbose logs are enabled by default; pass `-WhatIf` to preview changes.
 
