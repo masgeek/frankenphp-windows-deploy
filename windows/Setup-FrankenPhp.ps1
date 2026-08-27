@@ -20,7 +20,6 @@ param(
     [string] $ConfigPath = (Join-Path $PSScriptRoot '..\..\frankenphp-deploy.psd1'),
     [switch] $Development,
     [switch] $OpenFirewall,
-    [switch] $ForceFrankenPhpDownload
 )
 
 $ErrorActionPreference = 'Stop'
@@ -68,26 +67,12 @@ if (Test-Path $ConfigPath -PathType Leaf) {
     }
 }
 
-$installPathFromConfig = $false
-if ((Test-Path $ConfigPath -PathType Leaf) -and $deploymentConfig.ContainsKey('InstallPath') -and
-    (-not $PSBoundParameters.ContainsKey('InstallPath'))) {
-    $installPathFromConfig = $true
-}
-
 if ($Port -eq $AdminPort) {
     throw 'The public and admin ports must be different.'
 }
 
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 $appPathCache = Join-Path $scriptPath '.cache'
-$installPathCache = Join-Path $scriptPath '.install-path.cache'
-if (-not $PSBoundParameters.ContainsKey('InstallPath') -and -not $installPathFromConfig -and
-    (Test-Path $installPathCache -PathType Leaf)) {
-    $cachedInstallPath = [IO.File]::ReadAllText($installPathCache).Trim()
-    if (-not [string]::IsNullOrWhiteSpace($cachedInstallPath)) {
-        $InstallPath = $cachedInstallPath
-    }
-}
 if (-not $PSBoundParameters.ContainsKey('AppPath')) {
     if (Test-Path $appPathCache -PathType Leaf) {
         $cachedAppPath = [IO.File]::ReadAllText($appPathCache).Trim()
@@ -121,9 +106,11 @@ if (-not (Test-Path $envFile -PathType Leaf)) {
     throw "The application environment file is missing: $envFile"
 }
 
-[IO.File]::WriteAllText($appPathCache, $AppPath, [Text.UTF8Encoding]::new($false))
-[IO.File]::WriteAllText($installPathCache, $InstallPath, [Text.UTF8Encoding]::new($false))
+if (-not (Test-Path $frankenPhp -PathType Leaf) -or -not (Test-Path $php -PathType Leaf)) {
+    throw "FrankenPHP is not installed at $InstallPath. Run Install-FrankenPhp.ps1 first."
+}
 
+[IO.File]::WriteAllText($appPathCache, $AppPath, [Text.UTF8Encoding]::new($false))
 Write-Step 'Checking Servy'
 $servyCommand = Get-Command servy-cli -ErrorAction SilentlyContinue
 if (-not $servyCommand) {
@@ -162,24 +149,7 @@ if ($existingService -and (Test-Path $legacyServiceExecutable -PathType Leaf)) {
     }
 }
 
-Write-Step 'Installing FrankenPHP'
-if ($ForceFrankenPhpDownload -or -not (Test-Path $frankenPhp -PathType Leaf)) {
-    $archive = Join-Path $env:TEMP "frankenphp-windows-$PID.zip"
-
-    try {
-        New-Item -ItemType Directory -Path $InstallPath -Force | Out-Null
-        Invoke-WebRequest `
-            -UseBasicParsing `
-            -Uri 'https://github.com/php/frankenphp/releases/latest/download/frankenphp-windows-x86_64.zip' `
-            -OutFile $archive
-        Expand-Archive -Path $archive -DestinationPath $InstallPath -Force
-    } finally {
-        Remove-Item $archive -Force -ErrorAction SilentlyContinue
-    }
-}
-
 if (-not (Test-Path $frankenPhp -PathType Leaf) -or -not (Test-Path $php -PathType Leaf)) {
-    throw 'The FrankenPHP Windows archive is incomplete.'
 }
 
 Invoke-CheckedCommand $frankenPhp @('version')
