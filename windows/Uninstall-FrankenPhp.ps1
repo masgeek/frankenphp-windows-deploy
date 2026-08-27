@@ -1,5 +1,7 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
+    [Alias('help', '--help')]
+    [switch] $ShowHelp,
     [string] $InstallPath = 'C:\FrankenPHP',
     [string] $ServiceName = 'laravel-frankenphp',
     [string] $FirewallRuleName = 'Laravel FrankenPHP',
@@ -9,6 +11,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $VerbosePreference = 'Continue'
+if ($ShowHelp -or $args -contains '--help' -or $MyInvocation.UnboundArguments -contains '--help' -or $MyInvocation.Line -match '(?:^|\s)--help(?:\s|$)') {
+    Write-Host "Usage: $([IO.Path]::GetFileName($PSCommandPath)) [parameters]"
+    Get-Help -Name $PSCommandPath -Full | Out-Host
+    return
+}
 
 function Invoke-CheckedCommand {
     param(
@@ -39,6 +46,7 @@ if (Test-Path $ConfigPath -PathType Leaf) {
 
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 $installPathCache = Join-Path $scriptPath '.install-path.cache'
+$appPathCache = Join-Path $scriptPath '.cache'
 if (-not $PSBoundParameters.ContainsKey('InstallPath') -and
     -not ($deploymentConfig -and $deploymentConfig.ContainsKey('InstallPath')) -and
     (Test-Path $installPathCache -PathType Leaf)) {
@@ -52,6 +60,16 @@ if (-not $PSBoundParameters.ContainsKey('InstallPath') -and
 $InstallPath = [IO.Path]::GetFullPath($InstallPath).TrimEnd('\')
 $extensionPath = Join-Path $InstallPath 'ext'
 $legacyServiceExecutable = Join-Path $InstallPath 'frankenphp-service.exe'
+
+if (Test-Path $appPathCache -PathType Leaf) {
+    $cachedAppPathValue = [IO.File]::ReadAllText($appPathCache).Trim()
+    if ($cachedAppPathValue) {
+        $cachedAppPath = [IO.Path]::GetFullPath($cachedAppPathValue).TrimEnd('\')
+        if ($cachedAppPath.Equals($InstallPath, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing to remove '$InstallPath' because it is also the cached application directory."
+        }
+    }
+}
 
 $existingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($existingService) {

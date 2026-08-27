@@ -1,10 +1,17 @@
 [CmdletBinding()]
 param(
+    [Alias('help', '--help')]
+    [switch] $ShowHelp,
     [string] $InstallPath = 'C:\FrankenPHP',
     [string] $SourcePath = (Join-Path $PSScriptRoot 'php.ini')
 )
 
 $ErrorActionPreference = 'Stop'
+if ($ShowHelp -or $args -contains '--help' -or $MyInvocation.UnboundArguments -contains '--help' -or $MyInvocation.Line -match '(?:^|\s)--help(?:\s|$)') {
+    Write-Host "Usage: $([IO.Path]::GetFileName($PSCommandPath)) [parameters]"
+    Get-Help -Name $PSCommandPath -Full | Out-Host
+    return
+}
 $VerbosePreference = 'Continue'
 
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()

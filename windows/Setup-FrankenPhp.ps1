@@ -1,5 +1,7 @@
-[CmdletBinding()]
+[CmdletBinding(SupportsShouldProcess)]
 param(
+    [Alias('help', '--help')]
+    [switch] $ShowHelp,
     [string] $AppPath = 'C:\app',
     [string] $InstallPath = 'C:\FrankenPHP',
     [ValidateRange(1, 65535)]
@@ -18,12 +20,18 @@ param(
     [string] $FirewallRuleName = 'Laravel FrankenPHP',
     [string] $HealthPath = '/up',
     [string] $ConfigPath = (Join-Path $PSScriptRoot '..\..\frankenphp-deploy.psd1'),
+    [string] $LogPath = '',
     [switch] $Development,
     [switch] $OpenFirewall
 )
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+if ($ShowHelp -or $args -contains '--help' -or $MyInvocation.UnboundArguments -contains '--help' -or $MyInvocation.Line -match '(?:^|\s)--help(?:\s|$)') {
+    Write-Host "Usage: $([IO.Path]::GetFileName($PSCommandPath)) [parameters]"
+    Get-Help -Name $PSCommandPath -Full | Out-Host
+    return
+}
 [Net.ServicePointManager]::SecurityProtocol = `
     [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
@@ -59,7 +67,7 @@ if (Test-Path $ConfigPath -PathType Leaf) {
     foreach ($parameterName in @(
         'AppPath', 'InstallPath', 'Port', 'AdminPort', 'Workers', 'MaxRequests',
         'SqlServerDriverVersion', 'RedisExtensionVersion', 'ServiceName',
-        'ServiceDisplayName', 'ServiceDescription', 'FirewallRuleName', 'HealthPath'
+        'ServiceDisplayName', 'ServiceDescription', 'FirewallRuleName', 'HealthPath', 'LogPath'
     )) {
         if (-not $PSBoundParameters.ContainsKey($parameterName) -and $deploymentConfig.ContainsKey($parameterName)) {
             Set-Variable -Name $parameterName -Value $deploymentConfig[$parameterName]
@@ -72,6 +80,22 @@ $frankenPhp = Join-Path $InstallPath 'frankenphp.exe'
 $php = Join-Path $InstallPath 'php.exe'
 if (-not (Test-Path $frankenPhp -PathType Leaf) -or -not (Test-Path $php -PathType Leaf)) {
     throw "FrankenPHP is not installed at $InstallPath. Run Install-FrankenPhp.ps1 first."
+}
+if ($ServiceName -notmatch '^[A-Za-z0-9_.-]+$') {
+    throw "Invalid service name '$ServiceName'."
+}
+
+$transcriptStarted = $false
+if (-not [string]::IsNullOrWhiteSpace($LogPath)) {
+    $LogPath = [IO.Path]::GetFullPath($LogPath)
+    New-Item -ItemType Directory -Path (Split-Path -Parent $LogPath) -Force | Out-Null
+    Start-Transcript -Path $LogPath -Append | Out-Null
+    $transcriptStarted = $true
+}
+if ($WhatIfPreference) {
+    Write-Verbose "WhatIf: application setup would run for '$AppPath'."
+    if ($transcriptStarted) { Stop-Transcript | Out-Null }
+    return
 }
 
 if ($Port -eq $AdminPort) {
@@ -95,6 +119,9 @@ if (-not $PSBoundParameters.ContainsKey('AppPath')) {
 }
 
 $AppPath = [IO.Path]::GetFullPath($AppPath)
+if ($AppPath.TrimEnd('\').Equals($InstallPath.TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'AppPath and InstallPath must be different directories.'
+}
 $artisan = Join-Path $AppPath 'artisan'
 $envFile = Join-Path $AppPath '.env'
 $phpIni = Join-Path $InstallPath 'php.ini'
@@ -197,3 +224,4 @@ Write-Step 'Installing and starting the FrankenPHP service'
     -OpenFirewall:$OpenFirewall
 
 Write-Host 'IIS was not modified and remains available for rollback.' -ForegroundColor Green
+if ($transcriptStarted) { Stop-Transcript | Out-Null }

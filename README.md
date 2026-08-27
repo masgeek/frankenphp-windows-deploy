@@ -21,12 +21,17 @@ Create `frankenphp-deploy.psd1` two directories above `windows/Setup-FrankenPhp.
     ServiceDescription = 'FrankenPHP and Laravel Octane service for My App.'
     FirewallRuleName = 'My App FrankenPHP'
     HealthPath = '/up'
+    FrankenPhpVersion = 'latest'
+    FrankenPhpSha256 = ''
+    LogPath = 'C:\logs\frankenphp-install.log'
 }
 ```
 
 Every value can also be passed directly as a script parameter. Explicit parameters take precedence over the configuration file.
 
-The default FrankenPHP installation directory is `C:\FrankenPHP`, avoiding protected `Program Files` permissions for runtime operations. Setup caches a custom install path in `windows/.install-path.cache` so a later uninstall can find it without passing `-InstallPath` again.
+The default FrankenPHP installation directory is `C:\FrankenPHP`, avoiding protected `Program Files` permissions for runtime operations. Setup caches a custom install path in `windows/.install-path.cache` so a later uninstall can find it without passing `-InstallPath` again. `FrankenPhpVersion` can pin a release, and `FrankenPhpSha256` can verify its archive.
+
+All Windows scripts support `--help` to display their available parameters without running any deployment actions.
 
 ## Usage
 
