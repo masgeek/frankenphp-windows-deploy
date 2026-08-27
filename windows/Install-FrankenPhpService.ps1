@@ -29,6 +29,8 @@ if ($ShowHelp -or $args -contains '--help' -or $MyInvocation.UnboundArguments -c
     Get-Help -Name $PSCommandPath -Full | Out-Host
     return
 }
+. (Join-Path $PSScriptRoot 'FrankenPhp-Helpers.ps1')
+Assert-FrankenPhpAdministrator -BoundParameters $PSBoundParameters -UnboundArguments $args -ScriptPath $PSCommandPath
 
 function Invoke-CheckedCommand {
     param(
@@ -40,12 +42,6 @@ function Invoke-CheckedCommand {
     if ($LASTEXITCODE -ne 0) {
         throw "Command failed with exit code $LASTEXITCODE`: $Executable $($Arguments -join ' ')"
     }
-}
-
-$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-$principal = [Security.Principal.WindowsPrincipal]::new($identity)
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    throw 'Run this script from an elevated PowerShell session.'
 }
 
 if (Test-Path $ConfigPath -PathType Leaf) {

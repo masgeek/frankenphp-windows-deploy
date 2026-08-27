@@ -32,20 +32,13 @@ if ($ShowHelp -or $args -contains '--help' -or $MyInvocation.UnboundArguments -c
     Get-Help -Name $PSCommandPath -Full | Out-Host
     return
 }
+. (Join-Path $PSScriptRoot 'FrankenPhp-Helpers.ps1')
+Assert-FrankenPhpAdministrator -BoundParameters $PSBoundParameters -UnboundArguments $args -ScriptPath $PSCommandPath
 [Net.ServicePointManager]::SecurityProtocol = `
     [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
 function Write-Step([string] $Message) {
     Write-Host "`n==> $Message" -ForegroundColor Cyan
-}
-
-function Assert-Administrator {
-    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
-
-    if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        throw 'Run this script from an elevated PowerShell session.'
-    }
 }
 
 function Invoke-CheckedCommand {
@@ -59,8 +52,6 @@ function Invoke-CheckedCommand {
         throw "Command failed with exit code $LASTEXITCODE`: $Executable $($Arguments -join ' ')"
     }
 }
-
-Assert-Administrator
 
 if (Test-Path $ConfigPath -PathType Leaf) {
     $deploymentConfig = Import-PowerShellDataFile $ConfigPath

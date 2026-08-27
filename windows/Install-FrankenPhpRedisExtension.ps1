@@ -11,6 +11,8 @@ if ($ShowHelp -or $args -contains '--help' -or $MyInvocation.UnboundArguments -c
     Get-Help -Name $PSCommandPath -Full | Out-Host
     return
 }
+. (Join-Path $PSScriptRoot 'FrankenPhp-Helpers.ps1')
+Assert-FrankenPhpAdministrator -BoundParameters $PSBoundParameters -UnboundArguments $args -ScriptPath $PSCommandPath
 [Net.ServicePointManager]::SecurityProtocol = `
     [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 

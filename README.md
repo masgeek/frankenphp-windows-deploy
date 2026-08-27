@@ -33,11 +33,16 @@ The default FrankenPHP installation directory is `C:\FrankenPHP`, avoiding prote
 
 All Windows scripts support `--help` to display their available parameters without running any deployment actions.
 
+Use `Manage-FrankenPhp.ps1` for an interactive menu to install the runtime, set up the Laravel application, test the runtime, or uninstall FrankenPHP.
+
+Deployment actions automatically request elevation through UAC when required, so an administrator PowerShell terminal is not needed. The initial installation still requires approving the UAC prompt because it changes machine PATH settings and installs services or firewall rules. The interactive manager itself remains non-elevated until an action is selected.
+
 ## Usage
 
 ```powershell
 .\deploy\windows\Install-FrankenPhp.ps1
 .\deploy\windows\Setup-FrankenPhp.ps1
+.\deploy\windows\Manage-FrankenPhp.ps1
 .\deploy\windows\Install-FrankenPhpService.ps1
 .\deploy\windows\Install-FrankenPhpService.ps1 -Uninstall
 .\deploy\windows\Uninstall-FrankenPhp.ps1

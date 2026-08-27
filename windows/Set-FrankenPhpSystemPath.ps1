@@ -11,12 +11,8 @@ if ($ShowHelp -or $args -contains '--help' -or $MyInvocation.UnboundArguments -c
     Get-Help -Name $PSCommandPath -Full | Out-Host
     return
 }
-
-$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-$principal = [Security.Principal.WindowsPrincipal]::new($identity)
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    throw 'Run this script from an elevated PowerShell session.'
-}
+. (Join-Path $PSScriptRoot 'FrankenPhp-Helpers.ps1')
+Assert-FrankenPhpAdministrator -BoundParameters $PSBoundParameters -UnboundArguments $args -ScriptPath $PSCommandPath
 
 $InstallPath = [IO.Path]::GetFullPath($InstallPath).TrimEnd('\')
 $php = Join-Path $InstallPath 'php.exe'
