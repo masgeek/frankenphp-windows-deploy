@@ -17,7 +17,6 @@ if ($ShowHelp -or $args -contains '--help' -or $MyInvocation.UnboundArguments -c
     return
 }
 . (Join-Path $PSScriptRoot 'FrankenPhp-Helpers.ps1')
-Assert-FrankenPhpAdministrator
 $VerbosePreference = 'Continue'
 
 $InstallPath = [IO.Path]::GetFullPath($InstallPath)

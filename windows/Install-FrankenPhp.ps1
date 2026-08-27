@@ -24,7 +24,6 @@ if ($ShowHelp -or $args -contains '--help' -or $MyInvocation.UnboundArguments -c
     return
 }
 . (Join-Path $PSScriptRoot 'FrankenPhp-Helpers.ps1')
-Assert-FrankenPhpAdministrator
 [Net.ServicePointManager]::SecurityProtocol = `
     [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
@@ -120,7 +119,6 @@ if (-not (Test-Path $frankenPhp -PathType Leaf) -or -not (Test-Path $php -PathTy
 }
 
 Invoke-CheckedCommand $frankenPhp @('version')
-Write-Verbose 'Publishing FrankenPHP to the system PATH.'
-& (Join-Path $scriptPath 'Set-FrankenPhpSystemPath.ps1') -InstallPath $InstallPath
 Write-Host "FrankenPHP is installed at $InstallPath." -ForegroundColor Green
+Write-Host 'Run Set-FrankenPhpSystemPath.ps1 from an elevated terminal before installing the service.' -ForegroundColor Yellow
 if ($transcriptStarted) { Stop-Transcript | Out-Null }

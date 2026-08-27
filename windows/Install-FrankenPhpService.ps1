@@ -63,12 +63,6 @@ if (Test-Path $ConfigPath -PathType Leaf) {
 $InstallPath = [IO.Path]::GetFullPath($InstallPath)
 $legacyServiceExecutable = Join-Path $InstallPath 'frankenphp-service.exe'
 $serviceId = $ServiceName
-$servyCommand = Get-Command servy-cli -ErrorAction SilentlyContinue
-if (-not $servyCommand) {
-    throw 'Servy must be installed separately and servy-cli must be available in PATH.'
-}
-
-$servyCli = $servyCommand.Source
 
 if ($Uninstall) {
     $existingService = Get-Service -Name $serviceId -ErrorAction SilentlyContinue
@@ -91,6 +85,12 @@ if ($Uninstall) {
     ) {
         Invoke-CheckedCommand $legacyServiceExecutable @('uninstall')
     } else {
+        $servyCommand = Get-Command servy-cli -ErrorAction SilentlyContinue
+        if (-not $servyCommand) {
+            throw 'Servy must be installed separately and servy-cli must be available in PATH.'
+        }
+
+        $servyCli = $servyCommand.Source
         Invoke-CheckedCommand $servyCli @('uninstall', "--name=$serviceId", '--quiet')
     }
 
@@ -98,6 +98,13 @@ if ($Uninstall) {
 
     return
 }
+
+$servyCommand = Get-Command servy-cli -ErrorAction SilentlyContinue
+if (-not $servyCommand) {
+    throw 'Servy must be installed separately and servy-cli must be available in PATH.'
+}
+
+$servyCli = $servyCommand.Source
 
 if ($Port -eq $AdminPort) {
     throw 'The public and admin ports must be different.'

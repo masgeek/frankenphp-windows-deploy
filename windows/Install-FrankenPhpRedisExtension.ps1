@@ -16,7 +16,6 @@ if ($ShowHelp -or $args -contains '--help' -or $MyInvocation.UnboundArguments -c
     return
 }
 . (Join-Path $PSScriptRoot 'FrankenPhp-Helpers.ps1')
-Assert-FrankenPhpAdministrator
 [Net.ServicePointManager]::SecurityProtocol = `
     [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 

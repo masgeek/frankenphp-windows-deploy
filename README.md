@@ -4,7 +4,7 @@ Reusable PowerShell automation for deploying Laravel Octane with FrankenPHP and 
 
 ## Requirements
 
-- Elevated Windows PowerShell
+- Windows PowerShell 5.1 or PowerShell 7
 - Servy installed with `servy-cli` in `PATH`
 - A deployed Laravel application with `.env`, dependencies, assets, and caches already prepared
 
@@ -33,7 +33,7 @@ The default FrankenPHP installation directory is `C:\FrankenPHP`, avoiding prote
 
 All Windows scripts support `--help` to display their available parameters without running any deployment actions.
 
-Deployment scripts require an elevated PowerShell terminal because they change machine PATH settings and install services or firewall rules. The scripts report this requirement clearly when run without administrator privileges.
+Only machine-level operations require an elevated PowerShell terminal: publishing FrankenPHP to the machine PATH, installing or removing the service, and complete uninstall. Runtime installation, PHP configuration, extension installation, and testing run without elevation when `InstallPath` is writable. The scripts report clearly when administrator privileges are required.
 
 ## Usage
 
@@ -45,7 +45,7 @@ Deployment scripts require an elevated PowerShell terminal because they change m
 .\deploy\windows\Uninstall-FrankenPhp.ps1
 ```
 
-`Install-FrankenPhp.ps1` only installs and validates the FrankenPHP runtime, caches its install path, and publishes it to the system PATH. Run it before `Setup-FrankenPhp.ps1`. The setup configures the application, installs required PHP extensions including Redis and its companion DLLs, updates runtime configuration, validates Laravel, and configures the Servy service. Open a new terminal after setup before running commands such as `cr:dev`.
+`Install-FrankenPhp.ps1` only installs and validates the FrankenPHP runtime and caches its install path. Run `Set-FrankenPhpSystemPath.ps1` from an elevated terminal to publish the runtime to the machine PATH, then run `Setup-FrankenPhp.ps1`. Setup configures the application, installs required PHP extensions including Redis and its companion DLLs, updates runtime configuration, validates Laravel, and configures the Servy service. Open a new terminal after setup before running commands such as `cr:dev`.
 
 `Uninstall-FrankenPhp.ps1` removes the FrankenPHP service, firewall rule, machine environment settings, and FrankenPHP runtime directory. It retains the setup cache and does not modify the Laravel application. Use `-KeepInstallPath` to retain the runtime directory. Verbose logs are enabled by default; pass `-WhatIf` to preview changes.
 

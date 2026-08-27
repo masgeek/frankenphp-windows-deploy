@@ -171,9 +171,6 @@ if ($existingService -and (Test-Path $legacyServiceExecutable -PathType Leaf)) {
     }
 }
 
-if (-not (Test-Path $frankenPhp -PathType Leaf) -or -not (Test-Path $php -PathType Leaf)) {
-}
-
 Invoke-CheckedCommand $frankenPhp @('version')
 
 Write-Step 'Updating PHP and Caddy configuration'

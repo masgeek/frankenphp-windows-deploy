@@ -138,7 +138,9 @@ $processPathEntries = @($env:Path -split ';' | Where-Object { -not [string]::IsN
 $updatedProcessPath = @($processPathEntries | Where-Object {
     -not $_.Trim().TrimEnd('\').Equals($InstallPath, [StringComparison]::OrdinalIgnoreCase)
 }) -join ';'
-$env:Path = $updatedProcessPath
+if (-not $WhatIfPreference) {
+    $env:Path = $updatedProcessPath
+}
 
 $machineExtensionPath = [Environment]::GetEnvironmentVariable('FRANKENPHP_EXT_DIR', 'Machine')
 if ($machineExtensionPath -and $machineExtensionPath.Trim().TrimEnd('\').Equals($extensionPath, [StringComparison]::OrdinalIgnoreCase)) {
@@ -148,8 +150,10 @@ if ($machineExtensionPath -and $machineExtensionPath.Trim().TrimEnd('\').Equals(
     }
 }
 if ($env:FRANKENPHP_EXT_DIR -and $env:FRANKENPHP_EXT_DIR.Trim().TrimEnd('\').Equals($extensionPath, [StringComparison]::OrdinalIgnoreCase)) {
-    Write-Verbose 'Removing the process FRANKENPHP_EXT_DIR variable.'
-    Remove-Item Env:FRANKENPHP_EXT_DIR -ErrorAction SilentlyContinue
+    if (-not $WhatIfPreference) {
+        Write-Verbose 'Removing the process FRANKENPHP_EXT_DIR variable.'
+        Remove-Item Env:FRANKENPHP_EXT_DIR -ErrorAction SilentlyContinue
+    }
 }
 
 $firewallRule = Get-NetFirewallRule -DisplayName $FirewallRuleName -ErrorAction SilentlyContinue
