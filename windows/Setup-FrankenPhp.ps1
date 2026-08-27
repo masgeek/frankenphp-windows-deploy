@@ -69,8 +69,8 @@ if (Test-Path $ConfigPath -PathType Leaf) {
 }
 
 $installPathFromConfig = $false
-if (Test-Path $ConfigPath -PathType Leaf -and $deploymentConfig.ContainsKey('InstallPath') -and
-    -not $PSBoundParameters.ContainsKey('InstallPath')) {
+if ((Test-Path $ConfigPath -PathType Leaf) -and $deploymentConfig.ContainsKey('InstallPath') -and
+    (-not $PSBoundParameters.ContainsKey('InstallPath'))) {
     $installPathFromConfig = $true
 }
 
