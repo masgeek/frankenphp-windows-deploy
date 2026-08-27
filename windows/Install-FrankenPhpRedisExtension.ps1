@@ -1,5 +1,5 @@
 param(
-    [string] $InstallPath = 'C:\Program Files\FrankenPHP',
+    [string] $InstallPath = 'C:\FrankenPHP',
     [string] $ExtensionVersion = '6.3.0'
 )
 

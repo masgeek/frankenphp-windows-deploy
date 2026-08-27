@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string] $InstallPath = 'C:\Program Files\FrankenPHP',
+    [string] $InstallPath = 'C:\FrankenPHP',
     [string] $SourcePath = (Join-Path $PSScriptRoot 'php.ini')
 )
 

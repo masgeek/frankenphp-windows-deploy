@@ -1,5 +1,5 @@
 param(
-    [string] $FrankenPhp = 'C:\Program Files\FrankenPHP\frankenphp.exe',
+    [string] $FrankenPhp = 'C:\FrankenPHP\frankenphp.exe',
     [string] $AppPath = 'C:\app',
     [string] $PhpIni = '',
     [string] $ConfigPath = (Join-Path $PSScriptRoot '..\..\frankenphp-deploy.psd1')

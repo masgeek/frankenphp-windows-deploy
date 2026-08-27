@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string] $AppPath = 'C:\app',
-    [string] $InstallPath = 'C:\Program Files\FrankenPHP',
+    [string] $InstallPath = 'C:\FrankenPHP',
     [ValidateRange(1, 65535)]
     [int] $Port = 8001,
     [ValidateRange(1, 65535)]

@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string] $AppPath = 'C:\app',
-    [string] $InstallPath = 'C:\Program Files\FrankenPHP',
+    [string] $InstallPath = 'C:\FrankenPHP',
     [ValidateRange(1, 65535)]
     [int] $Port = 8001,
     [ValidateRange(1, 65535)]
@@ -68,12 +68,26 @@ if (Test-Path $ConfigPath -PathType Leaf) {
     }
 }
 
+$installPathFromConfig = $false
+if (Test-Path $ConfigPath -PathType Leaf -and $deploymentConfig.ContainsKey('InstallPath') -and
+    -not $PSBoundParameters.ContainsKey('InstallPath')) {
+    $installPathFromConfig = $true
+}
+
 if ($Port -eq $AdminPort) {
     throw 'The public and admin ports must be different.'
 }
 
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 $appPathCache = Join-Path $scriptPath '.cache'
+$installPathCache = Join-Path $scriptPath '.install-path.cache'
+if (-not $PSBoundParameters.ContainsKey('InstallPath') -and -not $installPathFromConfig -and
+    (Test-Path $installPathCache -PathType Leaf)) {
+    $cachedInstallPath = [IO.File]::ReadAllText($installPathCache).Trim()
+    if (-not [string]::IsNullOrWhiteSpace($cachedInstallPath)) {
+        $InstallPath = $cachedInstallPath
+    }
+}
 if (-not $PSBoundParameters.ContainsKey('AppPath')) {
     if (Test-Path $appPathCache -PathType Leaf) {
         $cachedAppPath = [IO.File]::ReadAllText($appPathCache).Trim()
@@ -108,6 +122,7 @@ if (-not (Test-Path $envFile -PathType Leaf)) {
 }
 
 [IO.File]::WriteAllText($appPathCache, $AppPath, [Text.UTF8Encoding]::new($false))
+[IO.File]::WriteAllText($installPathCache, $InstallPath, [Text.UTF8Encoding]::new($false))
 
 Write-Step 'Checking Servy'
 $servyCommand = Get-Command servy-cli -ErrorAction SilentlyContinue

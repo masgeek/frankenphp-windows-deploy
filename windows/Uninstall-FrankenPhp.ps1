@@ -1,6 +1,6 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    [string] $InstallPath = 'C:\Program Files\FrankenPHP',
+    [string] $InstallPath = 'C:\FrankenPHP',
     [string] $ServiceName = 'laravel-frankenphp',
     [string] $FirewallRuleName = 'Laravel FrankenPHP',
     [string] $ConfigPath = (Join-Path $PSScriptRoot '..\..\frankenphp-deploy.psd1'),
@@ -34,6 +34,18 @@ if (Test-Path $ConfigPath -PathType Leaf) {
         if (-not $PSBoundParameters.ContainsKey($parameterName) -and $deploymentConfig.ContainsKey($parameterName)) {
             Set-Variable -Name $parameterName -Value $deploymentConfig[$parameterName]
         }
+    }
+}
+
+$scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
+$installPathCache = Join-Path $scriptPath '.install-path.cache'
+if (-not $PSBoundParameters.ContainsKey('InstallPath') -and
+    -not ($deploymentConfig -and $deploymentConfig.ContainsKey('InstallPath')) -and
+    (Test-Path $installPathCache -PathType Leaf)) {
+    $cachedInstallPath = [IO.File]::ReadAllText($installPathCache).Trim()
+    if (-not [string]::IsNullOrWhiteSpace($cachedInstallPath)) {
+        $InstallPath = $cachedInstallPath
+        Write-Verbose "Using cached FrankenPHP installation path '$InstallPath'."
     }
 }
 
