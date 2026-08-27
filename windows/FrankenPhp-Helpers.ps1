@@ -1,9 +1,5 @@
 function Assert-FrankenPhpAdministrator {
-    param(
-        [hashtable] $BoundParameters,
-        [string[]] $UnboundArguments,
-        [string] $ScriptPath
-    )
+    param()
 
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
@@ -11,29 +7,14 @@ function Assert-FrankenPhpAdministrator {
         return
     }
 
-    $argumentList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $ScriptPath)
-    foreach ($parameter in $BoundParameters.GetEnumerator()) {
-        if ($parameter.Value -is [switch] -and $parameter.Value.IsPresent) {
-            $argumentList += "-$($parameter.Key)"
-        } elseif ($null -ne $parameter.Value) {
-            $argumentList += "-$($parameter.Key)"
-            $argumentList += [string] $parameter.Value
-        }
-    }
-    $argumentList += $UnboundArguments
+    throw 'Administrator privileges are required. Re-open PowerShell as Administrator and run this script again.'
+}
 
-    $hostExecutable = if ($PSVersionTable.PSEdition -eq 'Core') {
-        Join-Path $PSHOME 'pwsh.exe'
-    } else {
-        Join-Path $PSHOME 'powershell.exe'
-    }
+function Show-FrankenPhpError {
+    param([System.Management.Automation.ErrorRecord] $ErrorRecord)
 
-    Write-Host 'Administrator privileges are required. Requesting elevation...' -ForegroundColor Yellow
-    $elevatedProcess = Start-Process `
-        -FilePath $hostExecutable `
-        -Verb RunAs `
-        -ArgumentList $argumentList `
-        -Wait `
-        -PassThru
-    exit $elevatedProcess.ExitCode
+    Write-Host "`nERROR: $($ErrorRecord.Exception.Message)" -ForegroundColor Red
+    if ($Host.Name -notmatch 'ServerRemoteHost') {
+        [void](Read-Host 'Press Enter to close')
+    }
 }

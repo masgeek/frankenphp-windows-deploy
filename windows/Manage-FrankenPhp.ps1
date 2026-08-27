@@ -40,35 +40,20 @@ if (Test-Path $ConfigPath -PathType Leaf) {
 }
 $installPath = [IO.Path]::GetFullPath($installPath).TrimEnd('\')
 
-function Show-Header {
-    Clear-Host
-    Write-Host ''
-    Write-Host '  +--------------------------------------------------------------+' -ForegroundColor DarkCyan
-    Write-Host '  |              FRANKENPHP / WINDOWS DEPLOYMENT                |' -ForegroundColor Cyan
-    Write-Host '  |                 runtime control console                     |' -ForegroundColor DarkCyan
-    Write-Host '  +--------------------------------------------------------------+' -ForegroundColor DarkCyan
-    Write-Host "  Runtime path: $installPath" -ForegroundColor DarkGray
-    Write-Host ''
-}
-
 function Show-Menu {
-    Show-Header
-    Write-Host '  RUNTIME' -ForegroundColor Yellow
-    Write-Host '    [1] Install or update FrankenPHP'
-    Write-Host '    [2] Publish FrankenPHP to PATH'
-    Write-Host '    [3] Test FrankenPHP runtime'
     Write-Host ''
-    Write-Host '  PHP TOOLCHAIN' -ForegroundColor Yellow
-    Write-Host '    [4] Copy and update php.ini'
-    Write-Host '    [5] Install SQL Server drivers'
-    Write-Host '    [6] Install Redis extension'
-    Write-Host ''
-    Write-Host '  APPLICATION AND SERVICE' -ForegroundColor Yellow
-    Write-Host '    [7] Set up Laravel application (full setup)'
-    Write-Host '    [8] Install or update FrankenPHP service'
-    Write-Host '    [9] Uninstall FrankenPHP'
-    Write-Host ''
-    Write-Host '    [Q] Quit' -ForegroundColor DarkGray
+    Write-Host 'FrankenPHP Deployment' -ForegroundColor Cyan
+    Write-Host "Install path: $installPath" -ForegroundColor DarkGray
+    Write-Host '1. Install or update FrankenPHP'
+    Write-Host '2. Publish FrankenPHP to PATH'
+    Write-Host '3. Test FrankenPHP runtime'
+    Write-Host '4. Copy and update php.ini'
+    Write-Host '5. Install SQL Server drivers'
+    Write-Host '6. Install Redis extension'
+    Write-Host '7. Set up Laravel application'
+    Write-Host '8. Install or update FrankenPHP service'
+    Write-Host '9. Uninstall FrankenPHP'
+    Write-Host 'Q. Quit'
     Write-Host ''
 }
 
@@ -80,17 +65,21 @@ function Invoke-Action {
     )
 
     $targetScript = Join-Path $scriptPath $Script
-    Show-Header
-    Write-Host "  RUNNING  $Name" -ForegroundColor Cyan
-    Write-Host "  $Script" -ForegroundColor DarkGray
-    Write-Host ''
+    Write-Host "`nRunning $Name..." -ForegroundColor Cyan
     $hostExecutable = if ($PSVersionTable.PSEdition -eq 'Core') {
         Join-Path $PSHOME 'pwsh.exe'
     } else {
         Join-Path $PSHOME 'powershell.exe'
     }
     $processArguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $targetScript) + $Arguments
-    $actionProcess = Start-Process -FilePath $hostExecutable -ArgumentList $processArguments -Wait -PassThru
+    $quotedArguments = $processArguments | ForEach-Object {
+        if ($_ -match '^-') {
+            $_
+        } else {
+            '"' + ([string] $_).Replace('"', '\"') + '"'
+        }
+    }
+    $actionProcess = Start-Process -FilePath $hostExecutable -ArgumentList ($quotedArguments -join ' ') -WorkingDirectory $scriptPath -Wait -PassThru
     if ($actionProcess.ExitCode -ne 0) {
         throw "The action failed with exit code $($actionProcess.ExitCode)."
     }
@@ -99,7 +88,7 @@ function Invoke-Action {
 while ($true) {
     Show-Menu
 
-    $selection = (Read-Host '  Select an action').Trim().ToUpperInvariant()
+    $selection = (Read-Host 'Select an action').Trim().ToUpperInvariant()
     if ($selection -eq 'Q') {
         break
     }
@@ -118,9 +107,9 @@ while ($true) {
             default { throw 'Invalid selection. Choose a displayed number or Q.' }
         }
     } catch {
-        Write-Host "`n  ERROR  $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host $_.Exception.Message -ForegroundColor Red
     }
 
     Write-Host ''
-    [void](Read-Host '  Press Enter to return to the menu')
+    [void](Read-Host 'Press Enter to return to the menu')
 }

@@ -35,7 +35,7 @@ All Windows scripts support `--help` to display their available parameters witho
 
 Use `Manage-FrankenPhp.ps1` for an interactive menu to install the runtime, set up the Laravel application, test the runtime, or uninstall FrankenPHP.
 
-Deployment actions automatically request elevation through UAC when required, so an administrator PowerShell terminal is not needed. The initial installation still requires approving the UAC prompt because it changes machine PATH settings and installs services or firewall rules. The interactive manager itself remains non-elevated until an action is selected.
+Deployment scripts require an elevated PowerShell terminal because they change machine PATH settings and install services or firewall rules. The scripts report this requirement clearly when run without administrator privileges. The interactive manager itself can open normally, but its actions must be run from an elevated terminal.
 
 ## Usage
 

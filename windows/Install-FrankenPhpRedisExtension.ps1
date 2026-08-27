@@ -6,13 +6,17 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+trap {
+    Show-FrankenPhpError $_
+    exit 1
+}
 if ($ShowHelp -or $args -contains '--help' -or $MyInvocation.UnboundArguments -contains '--help' -or $MyInvocation.Line -match '(?:^|\s)--help(?:\s|$)') {
     Write-Host "Usage: $([IO.Path]::GetFileName($PSCommandPath)) [parameters]"
     Get-Help -Name $PSCommandPath -Full | Out-Host
     return
 }
 . (Join-Path $PSScriptRoot 'FrankenPhp-Helpers.ps1')
-Assert-FrankenPhpAdministrator -BoundParameters $PSBoundParameters -UnboundArguments $args -ScriptPath $PSCommandPath
+Assert-FrankenPhpAdministrator
 [Net.ServicePointManager]::SecurityProtocol = `
     [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
