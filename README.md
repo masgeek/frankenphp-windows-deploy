@@ -15,6 +15,7 @@ Create `frankenphp-deploy.psd1` two directories above `windows/Setup-FrankenPhp.
 ```powershell
 @{
     AppPath = 'C:\app'
+    InstallPath = 'C:\FrankenPHP'
     ServiceName = 'my-app-frankenphp'
     ServiceDisplayName = 'My App - FrankenPHP'
     ServiceDescription = 'FrankenPHP and Laravel Octane service for My App.'
@@ -24,6 +25,8 @@ Create `frankenphp-deploy.psd1` two directories above `windows/Setup-FrankenPhp.
 ```
 
 Every value can also be passed directly as a script parameter. Explicit parameters take precedence over the configuration file.
+
+The default FrankenPHP installation directory is `C:\FrankenPHP`, avoiding protected `Program Files` permissions for runtime operations. Setup caches a custom install path in `windows/.install-path.cache` so a later uninstall can find it without passing `-InstallPath` again.
 
 ## Usage
 
