@@ -19,7 +19,7 @@ param(
     [string] $HealthPath = '/up',
     [string] $ConfigPath = (Join-Path $PSScriptRoot '..\..\frankenphp-deploy.psd1'),
     [switch] $Development,
-    [switch] $OpenFirewall,
+    [switch] $OpenFirewall
 )
 
 $ErrorActionPreference = 'Stop'
@@ -67,6 +67,13 @@ if (Test-Path $ConfigPath -PathType Leaf) {
     }
 }
 
+$InstallPath = [IO.Path]::GetFullPath($InstallPath)
+$frankenPhp = Join-Path $InstallPath 'frankenphp.exe'
+$php = Join-Path $InstallPath 'php.exe'
+if (-not (Test-Path $frankenPhp -PathType Leaf) -or -not (Test-Path $php -PathType Leaf)) {
+    throw "FrankenPHP is not installed at $InstallPath. Run Install-FrankenPhp.ps1 first."
+}
+
 if ($Port -eq $AdminPort) {
     throw 'The public and admin ports must be different.'
 }
@@ -88,11 +95,8 @@ if (-not $PSBoundParameters.ContainsKey('AppPath')) {
 }
 
 $AppPath = [IO.Path]::GetFullPath($AppPath)
-$InstallPath = [IO.Path]::GetFullPath($InstallPath)
 $artisan = Join-Path $AppPath 'artisan'
 $envFile = Join-Path $AppPath '.env'
-$frankenPhp = Join-Path $InstallPath 'frankenphp.exe'
-$php = Join-Path $InstallPath 'php.exe'
 $phpIni = Join-Path $InstallPath 'php.ini'
 $caddyFile = Join-Path $InstallPath 'Caddyfile'
 $legacyServiceExecutable = Join-Path $InstallPath 'frankenphp-service.exe'
@@ -104,10 +108,6 @@ if (-not (Test-Path $artisan -PathType Leaf)) {
 
 if (-not (Test-Path $envFile -PathType Leaf)) {
     throw "The application environment file is missing: $envFile"
-}
-
-if (-not (Test-Path $frankenPhp -PathType Leaf) -or -not (Test-Path $php -PathType Leaf)) {
-    throw "FrankenPHP is not installed at $InstallPath. Run Install-FrankenPhp.ps1 first."
 }
 
 [IO.File]::WriteAllText($appPathCache, $AppPath, [Text.UTF8Encoding]::new($false))
