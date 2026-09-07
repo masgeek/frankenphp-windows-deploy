@@ -4,7 +4,7 @@ param(
     [string] $FrankenPhp = 'C:\FrankenPHP\frankenphp.exe',
     [string] $AppPath = 'C:\app',
     [string] $PhpIni = '',
-    [string] $ConfigPath = (Join-Path $PSScriptRoot '..\..\frankenphp-deploy.psd1')
+    [string] $ConfigPath = (Join-Path $PSScriptRoot '..\..\..\frankenphp-deploy.psd1')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -30,7 +30,8 @@ if (
 }
 
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
-$appPathCache = Join-Path $scriptPath '.cache'
+$windowsPath = Split-Path -Parent $scriptPath
+$appPathCache = Join-Path $windowsPath '.cache'
 if (-not $PSBoundParameters.ContainsKey('AppPath')) {
     if (Test-Path $appPathCache -PathType Leaf) {
         $cachedAppPath = [IO.File]::ReadAllText($appPathCache).Trim()
