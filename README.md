@@ -47,6 +47,10 @@ Only machine-level operations require an elevated PowerShell terminal: publishin
 
 `Install-FrankenPhp.ps1` only installs and validates the FrankenPHP runtime and caches its install path. Run `Set-FrankenPhpSystemPath.ps1` from an elevated terminal to publish the runtime to the machine PATH, then run `Setup-FrankenPhp.ps1`. Setup configures the application, installs required PHP extensions including Redis and its companion DLLs, updates runtime configuration, validates Laravel, and configures the Servy service. Open a new terminal after setup before running commands such as `cr:dev`.
 
+`windows/php.ini-development` enables visible errors, assertions, timestamp validation, and development-friendly limits. The existing `windows/php.ini` remains the deployment configuration.
+
+When run directly, `Update-FrankenPhpPhpIni.ps1` prompts you to choose the Production or Development configuration. Use `-Environment Development` or `-Environment Production` to skip the prompt. An explicit `-SourcePath` overrides the environment selection.
+
 `Uninstall-FrankenPhp.ps1` removes the FrankenPHP service, firewall rule, machine environment settings, and FrankenPHP runtime directory. It retains the setup cache and does not modify the Laravel application. Use `-KeepInstallPath` to retain the runtime directory. Verbose logs are enabled by default; pass `-WhatIf` to preview changes.
 
 It does not install application dependencies, build assets, run migrations, modify `.env`, or modify IIS.
