@@ -36,7 +36,7 @@ if ($ShowHelp -or $args -contains '--help' -or $MyInvocation.UnboundArguments -c
     Get-Help -Name $PSCommandPath -Full | Out-Host
     return
 }
-. (Join-Path $PSScriptRoot 'FrankenPhp-Helpers.ps1')
+. (Join-Path $PSScriptRoot 'internal\FrankenPhp-Helpers.ps1')
 Assert-FrankenPhpAdministrator
 [Net.ServicePointManager]::SecurityProtocol = `
     [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
@@ -74,7 +74,7 @@ $InstallPath = [IO.Path]::GetFullPath($InstallPath)
 $frankenPhp = Join-Path $InstallPath 'frankenphp.exe'
 $php = Join-Path $InstallPath 'php.exe'
 if (-not (Test-Path $frankenPhp -PathType Leaf) -or -not (Test-Path $php -PathType Leaf)) {
-    throw "FrankenPHP is not installed at $InstallPath. Run Install-FrankenPhp.ps1 first."
+    throw "FrankenPHP is not installed at $InstallPath. Run Install-Php.ps1 and choose FrankenPHP first."
 }
 if ($ServiceName -notmatch '^[A-Za-z0-9_.-]+$') {
     throw "Invalid service name '$ServiceName'."
@@ -174,33 +174,33 @@ if ($existingService -and (Test-Path $legacyServiceExecutable -PathType Leaf)) {
 Invoke-CheckedCommand $frankenPhp @('version')
 
 Write-Step 'Updating PHP and Caddy configuration'
-& (Join-Path $scriptPath 'Update-FrankenPhpPhpIni.ps1') -InstallPath $InstallPath -Environment Production
+& (Join-Path $scriptPath 'internal\Update-FrankenPhpPhpIni.ps1') -InstallPath $InstallPath -Environment Production
 Copy-Item (Join-Path $scriptPath 'Caddyfile') $caddyFile -Force
 
 $env:PHPRC = $phpIni
 $env:FRANKENPHP_EXT_DIR = Join-Path $InstallPath 'ext'
 
 Write-Step 'Installing Microsoft SQL Server PHP drivers'
-& (Join-Path $scriptPath 'Install-FrankenPhpSqlServerDrivers.ps1') `
+& (Join-Path $scriptPath 'internal\Install-FrankenPhpSqlServerDrivers.ps1') `
     -InstallPath $InstallPath `
     -DriverVersion $SqlServerDriverVersion
 
 Write-Step 'Installing the PHP Redis extension'
-& (Join-Path $scriptPath 'Install-FrankenPhpRedisExtension.ps1') `
+& (Join-Path $scriptPath 'internal\Install-FrankenPhpRedisExtension.ps1') `
     -InstallPath $InstallPath `
     -ExtensionVersion $RedisExtensionVersion
 
 Write-Step 'Publishing the FrankenPHP runtime environment'
-& (Join-Path $scriptPath 'Set-FrankenPhpSystemPath.ps1') -InstallPath $InstallPath
+& (Join-Path $scriptPath 'internal\Set-FrankenPhpSystemPath.ps1') -InstallPath $InstallPath
 
 Write-Step 'Validating the FrankenPHP runtime'
-& (Join-Path $scriptPath 'Test-FrankenPhp.ps1') `
+& (Join-Path $scriptPath 'internal\Test-FrankenPhp.ps1') `
     -FrankenPhp $frankenPhp `
     -AppPath $AppPath `
     -PhpIni $phpIni
 
 Write-Step 'Installing and starting the FrankenPHP service'
-& (Join-Path $scriptPath 'Install-FrankenPhpService.ps1') `
+& (Join-Path $scriptPath 'internal\Install-FrankenPhpService.ps1') `
     -AppPath $AppPath `
     -InstallPath $InstallPath `
     -Port $Port `
