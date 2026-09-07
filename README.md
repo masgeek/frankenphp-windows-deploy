@@ -35,22 +35,33 @@ All Windows scripts support `--help` to display their available parameters witho
 
 Only machine-level operations require an elevated PowerShell terminal: publishing FrankenPHP to the machine PATH, installing or removing the service, and complete uninstall. Runtime installation, PHP configuration, extension installation, and testing run without elevation when `InstallPath` is writable. The scripts report clearly when administrator privileges are required.
 
-## Usage
+## Workflow
 
 ```powershell
-.\deploy\windows\Install-FrankenPhp.ps1
+.\deploy\windows\Install-Php.ps1
+.\deploy\windows\Update-PhpVersionCatalog.ps1
 .\deploy\windows\Setup-FrankenPhp.ps1
 .\deploy\windows\Install-FrankenPhpService.ps1
 .\deploy\windows\Install-FrankenPhpService.ps1 -Uninstall
-.\deploy\windows\Uninstall-FrankenPhp.ps1
+.\deploy\windows\Uninstall-Php.ps1
 ```
 
-`Install-FrankenPhp.ps1` only installs and validates the FrankenPHP runtime and caches its install path. Run `Set-FrankenPhpSystemPath.ps1` from an elevated terminal to publish the runtime to the machine PATH, then run `Setup-FrankenPhp.ps1`. Setup configures the application, installs required PHP extensions including Redis and its companion DLLs, updates runtime configuration, validates Laravel, and configures the Servy service. Open a new terminal after setup before running commands such as `cr:dev`.
+`Install-Php.ps1` is the unified runtime installer. Without `-Runtime`, it prompts for Regular PHP or FrankenPHP. Use `-Runtime Php` or `-Runtime FrankenPhp` for automation.
+
+Regular PHP installs into `C:\PHP` by default, caches custom paths in `windows/.php-install-path.cache`, updates the user PATH, and uses the development configuration. The installer prompts before installing SQL Server and Redis; use `-InstallSqlServer Yes|No` and `-InstallRedis Yes|No` for scripted runs. Every runtime derives extensions from `<InstallPath>\ext`. Run `Update-PhpVersionCatalog.ps1` to refresh the cached version list in `windows/.php-versions.cache`; `Install-Php.ps1` uses that cache when prompting for a version.
+
+The FrankenPHP setup workflow publishes FrankenPHP to the machine PATH from an elevated terminal. This is required before service setup so the service and new terminals resolve the FrankenPHP runtime.
+
+`Setup-FrankenPhp.ps1` performs Laravel application setup, copies the Caddyfile, installs PHP extensions, validates the application, and installs the service. It requires administrator privileges because it configures the service and machine-level runtime settings.
+
+The lower-level FrankenPHP service, PATH, validation, INI, and extension scripts are kept under `windows/internal/` and are used by the public workflows.
 
 `windows/php.ini-development` enables visible errors, assertions, timestamp validation, and development-friendly limits. The existing `windows/php.ini` remains the deployment configuration.
 
 When run directly, `Update-FrankenPhpPhpIni.ps1` prompts you to choose the Production or Development configuration. Use `-Environment Development` or `-Environment Production` to skip the prompt. An explicit `-SourcePath` overrides the environment selection.
 
 `Uninstall-FrankenPhp.ps1` removes the FrankenPHP service, firewall rule, machine environment settings, and FrankenPHP runtime directory. It retains the setup cache and does not modify the Laravel application. Use `-KeepInstallPath` to retain the runtime directory. Verbose logs are enabled by default; pass `-WhatIf` to preview changes.
+
+`Uninstall-Php.ps1` is the unified runtime removal command. It prompts for Regular PHP or FrankenPHP, or accepts `-Runtime Php` / `-Runtime FrankenPhp`. FrankenPHP removal requires administrator privileges because it removes services, firewall rules, machine PATH entries, and the runtime directory.
 
 It does not install application dependencies, build assets, run migrations, modify `.env`, or modify IIS.
