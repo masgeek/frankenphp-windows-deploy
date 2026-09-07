@@ -3,7 +3,9 @@ param(
     [Alias('help', '--help')]
     [switch] $ShowHelp,
     [string] $InstallPath = 'C:\FrankenPHP',
-    [string] $SourcePath = (Join-Path $PSScriptRoot 'php.ini')
+    [ValidateSet('Production', 'Development')]
+    [string] $Environment = 'Production',
+    [string] $SourcePath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,6 +22,23 @@ if ($ShowHelp -or $args -contains '--help' -or $MyInvocation.UnboundArguments -c
 $VerbosePreference = 'Continue'
 
 $InstallPath = [IO.Path]::GetFullPath($InstallPath)
+if (-not $PSBoundParameters.ContainsKey('Environment')) {
+    Write-Host 'Select PHP configuration:' -ForegroundColor Cyan
+    Write-Host '  [P] Production'
+    Write-Host '  [D] Development'
+    do {
+        $environmentChoice = (Read-Host 'Choose configuration [P]').Trim().ToUpperInvariant()
+        if ([string]::IsNullOrWhiteSpace($environmentChoice)) {
+            $environmentChoice = 'P'
+        }
+    } until ($environmentChoice -in @('P', 'D'))
+
+    $Environment = if ($environmentChoice -eq 'D') { 'Development' } else { 'Production' }
+}
+if (-not $PSBoundParameters.ContainsKey('SourcePath')) {
+    $sourceFileName = if ($Environment -eq 'Development') { 'php.ini-development' } else { 'php.ini' }
+    $SourcePath = Join-Path $PSScriptRoot $sourceFileName
+}
 $SourcePath = [IO.Path]::GetFullPath($SourcePath)
 $destination = Join-Path $InstallPath 'php.ini'
 

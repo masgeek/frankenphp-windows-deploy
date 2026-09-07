@@ -174,7 +174,7 @@ if ($existingService -and (Test-Path $legacyServiceExecutable -PathType Leaf)) {
 Invoke-CheckedCommand $frankenPhp @('version')
 
 Write-Step 'Updating PHP and Caddy configuration'
-& (Join-Path $scriptPath 'Update-FrankenPhpPhpIni.ps1') -InstallPath $InstallPath
+& (Join-Path $scriptPath 'Update-FrankenPhpPhpIni.ps1') -InstallPath $InstallPath -Environment Production
 Copy-Item (Join-Path $scriptPath 'Caddyfile') $caddyFile -Force
 
 $env:PHPRC = $phpIni
