@@ -1,2 +1,4 @@
 windows/.cache
 windows/.install-path.cache
+windows/.php-versions.cache
+windows/.php-install-path.cache
