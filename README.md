@@ -64,4 +64,14 @@ When run directly, `Update-FrankenPhpPhpIni.ps1` prompts you to choose the Produ
 
 `Uninstall-Php.ps1` is the unified runtime removal command. It prompts for Regular PHP or FrankenPHP, or accepts `-Runtime Php` / `-Runtime FrankenPhp`. FrankenPHP removal requires administrator privileges because it removes services, firewall rules, machine PATH entries, and the runtime directory.
 
+### CA certificate bundle
+
+If you installed PHP without the CA certificate bundle, you can add it later:
+
+```powershell
+.\deploy\windows\Set-PhpCacert.ps1
+```
+
+The script prompts for the runtime and installation path, downloads `cacert.pem`, and patches `php.ini` with `openssl.cafile`.
+
 It does not install application dependencies, build assets, run migrations, modify `.env`, or modify IIS.
