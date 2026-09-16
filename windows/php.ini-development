@@ -51,3 +51,9 @@ opcache.enable_cli=0
 opcache.validate_timestamps=1
 opcache.revalidate_freq=0
 opcache.save_comments=1
+
+[curl]
+curl.cainfo=
+
+[openssl]
+openssl.cafile=
