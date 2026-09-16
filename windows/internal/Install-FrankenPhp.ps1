@@ -8,6 +8,7 @@ param(
     [ValidatePattern('^[A-Fa-f0-9]{64}$')]
     [string] $ExpectedSha256 = '',
     [string] $LogPath = '',
+    [string] $SetupCacert = 'Prompt',
     [switch] $ForceDownload
 )
 
@@ -122,4 +123,40 @@ if (-not (Test-Path $frankenPhp -PathType Leaf) -or -not (Test-Path $php -PathTy
 Invoke-CheckedCommand $frankenPhp @('version')
 Write-Host "FrankenPHP is installed at $InstallPath." -ForegroundColor Green
 Write-Host 'Run the setup workflow from an elevated terminal before installing the service.' -ForegroundColor Yellow
+if ($SetupCacert -notin @('Prompt', 'No')) {
+    if ($SetupCacert -eq 'Prompt') {
+        $answer = (Read-Host 'Install CA certificate bundle (cacert.pem)? [Y/n]').Trim().ToLowerInvariant()
+        $SetupCacert = if ($answer -in @('n', 'no')) { 'No' } else { 'Yes' }
+    }
+}
+if ($SetupCacert -eq 'Yes') {
+    Write-Verbose 'Downloading CA certificate bundle.'
+    $cacertDestination = Join-Path $InstallPath 'cacert.pem'
+    if ($ForceDownload -or -not (Test-Path $cacertDestination -PathType Leaf)) {
+        Invoke-WebRequest -UseBasicParsing -Uri 'https://curl.se/ca/cacert.pem' -OutFile $cacertDestination
+    }
+    $phpIni = Join-Path $InstallPath 'php.ini'
+    if (Test-Path $phpIni -PathType Leaf) {
+        $iniContent = [IO.File]::ReadAllText($phpIni)
+        $cacertPath = $cacertDestination -replace '\\', '/'
+        $iniContent = [Regex]::Replace(
+            $iniContent,
+            '(?m)^\s*;?\s*curl\.cainfo\s*=.*$',
+            "curl.cainfo = `"$cacertPath`""
+        )
+        if ($iniContent -notmatch '(?m)^\s*curl\.cainfo\s*=') {
+            $iniContent = $iniContent.TrimEnd() + "`ncurl.cainfo = `"$cacertPath`"`n"
+        }
+        $iniContent = [Regex]::Replace(
+            $iniContent,
+            '(?m)^\s*;?\s*openssl\.cafile\s*=.*$',
+            "openssl.cafile = `"$cacertPath`""
+        )
+        if ($iniContent -notmatch '(?m)^\s*openssl\.cafile\s*=') {
+            $iniContent = $iniContent.TrimEnd() + "`nopenssl.cafile = `"$cacertPath`"`n"
+        }
+        [IO.File]::WriteAllText($phpIni, $iniContent, [Text.UTF8Encoding]::new($false))
+    }
+    Write-Verbose "CA certificate bundle installed at $cacertDestination."
+}
 if ($transcriptStarted) { Stop-Transcript | Out-Null }

@@ -10,6 +10,7 @@ param(
     [string] $RedisExtensionVersion = '6.3.0',
     [string] $InstallSqlServer = 'Prompt',
     [string] $InstallRedis = 'Prompt',
+    [string] $SetupCacert = 'Prompt',
     [switch] $ForceDownload
 )
 
@@ -47,6 +48,7 @@ if ($Runtime -eq 'FrankenPhp') {
     if ($PSBoundParameters.ContainsKey('InstallPath')) {
         $frankenArguments += @('-InstallPath', $InstallPath)
     }
+    if ($SetupCacert -notin @('Prompt', '')) { $frankenArguments += @('-SetupCacert', $SetupCacert) }
     if ($ForceDownload) { $frankenArguments += '-ForceDownload' }
     & (Join-Path $PSScriptRoot 'internal\Install-FrankenPhp.ps1') @frankenArguments
     exit $LASTEXITCODE
@@ -54,7 +56,8 @@ if ($Runtime -eq 'FrankenPhp') {
 
 foreach ($extensionChoice in @(
     @{ Name = 'InstallSqlServer'; Label = 'SQL Server drivers' },
-    @{ Name = 'InstallRedis'; Label = 'Redis extension' }
+    @{ Name = 'InstallRedis'; Label = 'Redis extension' },
+    @{ Name = 'SetupCacert'; Label = 'CA certificate bundle (cacert.pem)' }
 )) {
     $choice = Get-Variable -Name $extensionChoice.Name -ValueOnly
     if ($choice -notin @('Prompt', 'Yes', 'No')) {
@@ -172,6 +175,33 @@ if ($InstallRedis -eq 'Yes') {
     & (Join-Path $PSScriptRoot 'internal\Install-FrankenPhpRedisExtension.ps1') `
         -InstallPath $InstallPath `
         -ExtensionVersion $RedisExtensionVersion
+}
+if ($SetupCacert -eq 'Yes') {
+    Write-Verbose 'Downloading CA certificate bundle.'
+    $cacertDestination = Join-Path $InstallPath 'cacert.pem'
+    if ($ForceDownload -or -not (Test-Path $cacertDestination -PathType Leaf)) {
+        Invoke-WebRequest -UseBasicParsing -Uri 'https://curl.se/ca/cacert.pem' -OutFile $cacertDestination
+    }
+    $iniContent = [IO.File]::ReadAllText($phpIni)
+    $cacertPath = $cacertDestination -replace '\\', '/'
+    $iniContent = [Regex]::Replace(
+        $iniContent,
+        '(?m)^\s*;?\s*curl\.cainfo\s*=.*$',
+        "curl.cainfo = `"$cacertPath`""
+    )
+    if ($iniContent -notmatch '(?m)^\s*curl\.cainfo\s*=') {
+        $iniContent = $iniContent.TrimEnd() + "`ncurl.cainfo = `"$cacertPath`"`n"
+    }
+    $iniContent = [Regex]::Replace(
+        $iniContent,
+        '(?m)^\s*;?\s*openssl\.cafile\s*=.*$',
+        "openssl.cafile = `"$cacertPath`""
+    )
+    if ($iniContent -notmatch '(?m)^\s*openssl\.cafile\s*=') {
+        $iniContent = $iniContent.TrimEnd() + "`nopenssl.cafile = `"$cacertPath`"`n"
+    }
+    [IO.File]::WriteAllText($phpIni, $iniContent, [Text.UTF8Encoding]::new($false))
+    Write-Verbose "CA certificate bundle installed at $cacertDestination."
 }
 
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
