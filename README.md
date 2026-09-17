@@ -48,7 +48,7 @@ Only machine-level operations require an elevated PowerShell terminal: publishin
 
 `Install-Php.ps1` is the unified runtime installer. Without `-Runtime`, it prompts for Regular PHP or FrankenPHP. Use `-Runtime Php` or `-Runtime FrankenPhp` for automation.
 
-Regular PHP installs into `C:\PHP` by default, caches custom paths in `windows/.php-install-path.cache`, updates the user PATH, and uses the development configuration. The installer prompts before installing SQL Server and Redis; use `-InstallSqlServer Yes|No` and `-InstallRedis Yes|No` for scripted runs. Every runtime derives extensions from `<InstallPath>\ext`. Run `Update-PhpVersionCatalog.ps1` to refresh the cached version list in `windows/.php-versions.cache`; `Install-Php.ps1` uses that cache when prompting for a version.
+For Regular PHP, `Install-Php.ps1` delegates to `php-install.ps1`, which manages multiple versions side-by-side under `C:\PHP\<version>`. Extensions and CA certificates are installed per-version. Use `-Version` to install a specific version, or let the script prompt you from the cached catalog.
 
 The FrankenPHP setup workflow publishes FrankenPHP to the machine PATH from an elevated terminal. This is required before service setup so the service and new terminals resolve the FrankenPHP runtime.
 
@@ -73,5 +73,29 @@ If you installed PHP without the CA certificate bundle, you can add it later:
 ```
 
 The script prompts for the runtime and installation path, downloads `cacert.pem`, and patches `php.ini` with `openssl.cafile`.
+
+### PHP Version Manager
+
+Manage multiple PHP versions side-by-side. Each version is stored in its own subdirectory under `C:\PHP` (e.g., `C:\PHP\8.4.12`, `C:\PHP\8.3.25`).
+
+```powershell
+# Install a new PHP version
+.\deploy\windows\php-install.ps1
+
+# List installed and available versions
+.\deploy\windows\php-list.ps1
+.\deploy\windows\php-list.ps1 -Available
+
+# Switch active PHP version
+.\deploy\windows\php-use.ps1 -Version 8.4.12
+
+# Show current active version
+.\deploy\windows\php-current.ps1
+
+# Remove an installed version
+.\deploy\windows\php-remove.ps1 -Version 8.3.25
+```
+
+The first version installed is automatically set as active. Switching versions updates the user PATH and `php.ini` location. Extensions and CA certificates are installed per-version.
 
 It does not install application dependencies, build assets, run migrations, modify `.env`, or modify IIS.
