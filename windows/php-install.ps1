@@ -11,6 +11,7 @@ param(
     [string] $InstallRedis = 'Prompt',
     [string] $SetupCacert = 'Prompt',
     [string] $SystemPath = 'Prompt',
+    [string] $IniSource = '',
     [switch] $ForceDownload
 )
 
@@ -19,7 +20,8 @@ $ProgressPreference = 'SilentlyContinue'
 $VerbosePreference = 'Continue'
 
 if ($ShowHelp -or $args -contains '--help' -or $MyInvocation.UnboundArguments -contains '--help' -or $MyInvocation.Line -match '(?:^|\s)--help(?:\s|$)') {
-    Write-Host "Usage: $([IO.Path]::GetFileName($PSCommandPath)) [-BasePath <path>] [-Version <version>] [-SystemPath Yes|No|Prompt] [-ForceDownload]"
+    Write-Host "Usage: $([IO.Path]::GetFileName($PSCommandPath)) [-BasePath <path>] [-Version <version>] [-IniSource <path>] [-SystemPath Yes|No|Prompt] [-ForceDownload]"
+    Write-Host "  -IniSource  Path to a custom php.ini file to use."
     return
 }
 
@@ -81,57 +83,138 @@ if ($Version -notmatch '^\d+\.\d+\.\d+$') {
 $installDir = Join-Path $BasePath $Version
 $php = Join-Path $installDir 'php.exe'
 $phpIni = Join-Path $installDir 'php.ini'
-$archive = Join-Path $env:TEMP "php-$Version-nts-x64-$PID.zip"
-$downloadUrls = @(
-    "https://windows.php.net/downloads/releases/php-$Version-nts-Win32-vs17-x64.zip"
-    "https://downloads.php.net/~windows/releases/php-$Version-nts-Win32-vs17-x64.zip"
-    "https://downloads.php.net/~windows/releases/archives/php-$Version-nts-Win32-vs17-x64.zip"
-)
+$isInstalled = Test-PhpVersionInstalled -Version $Version -BasePath $BasePath
 
-foreach ($extensionChoice in @(
-    @{ Name = 'InstallSqlServer'; Label = 'SQL Server drivers' },
-    @{ Name = 'InstallRedis'; Label = 'Redis extension' },
-    @{ Name = 'SetupCacert'; Label = 'CA certificate bundle (cacert.pem)' }
-)) {
-    $choice = Get-Variable -Name $extensionChoice.Name -ValueOnly
-    if ($choice -notin @('Prompt', 'Yes', 'No')) {
-        throw "Invalid $($extensionChoice.Name) value '$choice'. Use Prompt, Yes, or No."
-    }
-    if ($choice -eq 'Prompt') {
-        $answer = (Read-Host "Install $($extensionChoice.Label)? [Y/n]").Trim().ToLowerInvariant()
-        Set-Variable -Name $extensionChoice.Name -Value $(if ($answer -in @('n', 'no')) { 'No' } else { 'Yes' })
-    }
-}
+if ($PSCmdlet.ShouldProcess($installDir, "Configure PHP $Version")) {
+    if ($isInstalled) {
+        Write-Host ''
+        Write-Host "  PHP $Version is already installed at $installDir" -ForegroundColor Green
+        Write-Host ''
+        Write-Host '  What would you like to do?' -ForegroundColor Cyan
+        Write-Host '  --------------------------' -ForegroundColor DarkGray
+        Write-Host '  [1] Configure (php.ini + extensions)'
+        Write-Host '  [2] Reinstall (download again + configure)'
+        Write-Host '  [3] Skip'
+        Write-Host ''
+        do {
+            $action = (Read-Host '  Choose action [1]').Trim()
+            if ([string]::IsNullOrWhiteSpace($action)) { $action = '1' }
+        } until ($action -in @('1', '2', '3'))
 
-if ($PSCmdlet.ShouldProcess($installDir, "Install PHP $Version")) {
-    New-Item -ItemType Directory -Path $installDir -Force | Out-Null
+        if ($action -eq '3') {
+            Write-Host '  Skipping.' -ForegroundColor DarkGray
+            return
+        }
 
-    if ($ForceDownload -or -not (Test-Path $php -PathType Leaf)) {
-        $downloaded = $false
-        foreach ($downloadUrl in $downloadUrls) {
-            try {
-                Write-Verbose "Downloading PHP $Version from '$downloadUrl'."
-                Invoke-WebRequest -UseBasicParsing -Uri $downloadUrl -OutFile $archive
-                $downloaded = $true
-                break
-            } catch {
-                Write-Verbose "Download failed from '$downloadUrl': $($_.Exception.Message)"
+        if ($action -eq '2') {
+            Write-Host "  Downloading PHP $Version..." -ForegroundColor DarkGray
+            New-Item -ItemType Directory -Path $installDir -Force | Out-Null
+            $archive = Join-Path $env:TEMP "php-$Version-nts-x64-$PID.zip"
+            $downloadUrls = @(
+                "https://windows.php.net/downloads/releases/php-$Version-nts-Win32-vs17-x64.zip"
+                "https://downloads.php.net/~windows/releases/php-$Version-nts-Win32-vs17-x64.zip"
+                "https://downloads.php.net/~windows/releases/archives/php-$Version-nts-Win32-vs17-x64.zip"
+            )
+            $downloaded = $false
+            foreach ($downloadUrl in $downloadUrls) {
+                try {
+                    Write-Verbose "Downloading PHP $Version from '$downloadUrl'."
+                    Invoke-WebRequest -UseBasicParsing -Uri $downloadUrl -OutFile $archive
+                    $downloaded = $true
+                    break
+                } catch {
+                    Write-Verbose "Download failed from '$downloadUrl': $($_.Exception.Message)"
+                }
+            }
+            if (-not $downloaded) {
+                throw "Unable to download PHP $Version from the configured release URLs."
+            }
+            Expand-Archive -Path $archive -DestinationPath $installDir -Force
+            Remove-Item $archive -Force -ErrorAction SilentlyContinue
+            if (-not (Test-Path $php -PathType Leaf)) {
+                throw "PHP $Version could not be found at $php after extraction."
             }
         }
-        if (-not $downloaded) {
-            throw "Unable to download PHP $Version from the configured release URLs."
+    } else {
+        New-Item -ItemType Directory -Path $installDir -Force | Out-Null
+        $archive = Join-Path $env:TEMP "php-$Version-nts-x64-$PID.zip"
+        $downloadUrls = @(
+            "https://windows.php.net/downloads/releases/php-$Version-nts-Win32-vs17-x64.zip"
+            "https://downloads.php.net/~windows/releases/php-$Version-nts-Win32-vs17-x64.zip"
+            "https://downloads.php.net/~windows/releases/archives/php-$Version-nts-Win32-vs17-x64.zip"
+        )
+        if ($ForceDownload -or -not (Test-Path $php -PathType Leaf)) {
+            $downloaded = $false
+            foreach ($downloadUrl in $downloadUrls) {
+                try {
+                    Write-Verbose "Downloading PHP $Version from '$downloadUrl'."
+                    Invoke-WebRequest -UseBasicParsing -Uri $downloadUrl -OutFile $archive
+                    $downloaded = $true
+                    break
+                } catch {
+                    Write-Verbose "Download failed from '$downloadUrl': $($_.Exception.Message)"
+                }
+            }
+            if (-not $downloaded) {
+                throw "Unable to download PHP $Version from the configured release URLs."
+            }
+            Expand-Archive -Path $archive -DestinationPath $installDir -Force
+            Remove-Item $archive -Force -ErrorAction SilentlyContinue
         }
-        Expand-Archive -Path $archive -DestinationPath $installDir -Force
-        Remove-Item $archive -Force -ErrorAction SilentlyContinue
+        if (-not (Test-Path $php -PathType Leaf)) {
+            throw "PHP $Version could not be found at $php after extraction."
+        }
     }
 
-    if (-not (Test-Path $php -PathType Leaf)) {
-        throw "PHP $Version could not be found at $php after extraction."
-    }
+    Write-Host ''
+    Write-Host '  PHP configuration' -ForegroundColor Cyan
+    Write-Host '  -----------------' -ForegroundColor DarkGray
 
     $developmentIni = Join-Path $PSScriptRoot 'php.ini-development'
-    if (-not (Test-Path $phpIni -PathType Leaf)) {
-        Copy-Item $developmentIni $phpIni -Force
+    $productionIni = Join-Path $PSScriptRoot 'php.ini'
+    $hasExisting = Test-Path $phpIni -PathType Leaf
+
+    if ($IniSource) {
+        if (-not (Test-Path $IniSource -PathType Leaf)) {
+            throw "Custom php.ini not found: $IniSource"
+        }
+        Copy-Item $IniSource $phpIni -Force
+        Write-Host "  Copied $IniSource to $phpIni" -ForegroundColor DarkGray
+    } else {
+        if ($hasExisting) {
+            Write-Host '  [1] Keep existing php.ini'
+        }
+        Write-Host "  [$(if ($hasExisting) { '2' } else { '1' })] Development (visible errors, OPcache off)"
+        Write-Host "  [$(if ($hasExisting) { '3' } else { '2' })] Production (errors hidden, OPcache on)"
+        Write-Host "  [$(if ($hasExisting) { '4' } else { '3' })] Custom file..."
+        Write-Host ''
+        do {
+            $sourceChoice = (Read-Host "  Choose source [$(if ($hasExisting) { '1' } else { '1' })]").Trim()
+            if ([string]::IsNullOrWhiteSpace($sourceChoice)) { $sourceChoice = if ($hasExisting) { '1' } else { '1' } }
+        } until ($sourceChoice -match '^\d+$')
+
+        $selectedSource = if ($hasExisting) {
+            switch ($sourceChoice) {
+                '1' { $phpIni }
+                '2' { $developmentIni }
+                '3' { $productionIni }
+                '4' { (Read-Host '  Enter path to custom php.ini').Trim() }
+            }
+        } else {
+            switch ($sourceChoice) {
+                '1' { $developmentIni }
+                '2' { $productionIni }
+                '3' { (Read-Host '  Enter path to custom php.ini').Trim() }
+            }
+        }
+
+        if (-not (Test-Path $selectedSource -PathType Leaf)) {
+            throw "Source php.ini not found: $selectedSource"
+        }
+        if ($selectedSource -ne $phpIni) {
+            Copy-Item $selectedSource $phpIni -Force
+            Write-Host "  Copied to $phpIni" -ForegroundColor DarkGray
+        }
     }
 
     $iniContent = [IO.File]::ReadAllText($phpIni)
@@ -145,6 +228,21 @@ if ($PSCmdlet.ShouldProcess($installDir, "Install PHP $Version")) {
 
     $env:PHPRC = $phpIni
     $env:FRANKENPHP_EXT_DIR = $installDir
+
+    foreach ($extensionChoice in @(
+        @{ Name = 'InstallSqlServer'; Label = 'SQL Server drivers' },
+        @{ Name = 'InstallRedis'; Label = 'Redis extension' },
+        @{ Name = 'SetupCacert'; Label = 'CA certificate bundle (cacert.pem)' }
+    )) {
+        $choice = Get-Variable -Name $extensionChoice.Name -ValueOnly
+        if ($choice -notin @('Prompt', 'Yes', 'No')) {
+            throw "Invalid $($extensionChoice.Name) value '$choice'. Use Prompt, Yes, or No."
+        }
+        if ($choice -eq 'Prompt') {
+            $answer = (Read-Host "  Install $($extensionChoice.Label)? [Y/n]").Trim().ToLowerInvariant()
+            Set-Variable -Name $extensionChoice.Name -Value $(if ($answer -in @('n', 'no')) { 'No' } else { 'Yes' })
+        }
+    }
 
     if ($InstallSqlServer -eq 'Yes') {
         Write-Verbose 'Installing Microsoft SQL Server PHP drivers.'
@@ -186,15 +284,19 @@ if ($PSCmdlet.ShouldProcess($installDir, "Install PHP $Version")) {
     }
 
     $versionOutput = & $php --version 2>$null
-    if ($LASTEXITCODE -ne 0) { throw "PHP $Version was installed but could not be started." }
-    Write-Host ($versionOutput | Select-Object -First 1) -ForegroundColor Green
-    Write-Host "PHP $Version is installed at $installDir." -ForegroundColor Green
+    if ($LASTEXITCODE -ne 0) { throw "PHP $Version could not be started." }
+    Write-Host ''
+    Write-Host "  $($versionOutput | Select-Object -First 1)" -ForegroundColor Green
+    Write-Host "  Path: $installDir" -ForegroundColor DarkGray
 
     $activeVersion = Get-PhpActiveVersion -BasePath $BasePath
-    if (-not $activeVersion) {
-        Write-Host "This is the first PHP version. Setting it as active." -ForegroundColor Cyan
+    if (-not $activeVersion -or $activeVersion -eq $Version) {
+        if (-not $activeVersion) {
+            Write-Host "  This is the first PHP version. Setting it as active." -ForegroundColor Cyan
+        }
         Set-PhpActiveVersion -Version $Version -BasePath $BasePath -SystemPath $SystemPath
     } else {
-        Write-Host "Active PHP version is $activeVersion. Use 'php-use.ps1 -Version $Version' to switch." -ForegroundColor Yellow
+        Write-Host "  Active PHP version is $activeVersion. Use 'php-use.ps1 -Version $Version' to switch." -ForegroundColor Yellow
     }
+    Write-Host ''
 }
