@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>php-manager</AssemblyName>
+    <RootNamespace>PhpManager</RootNamespace>
+    <Title>PHP Manager</Title>
+    <Description>PHP Version and Extension Manager for Windows</Description>
+  </PropertyGroup>
+
+</Project>
