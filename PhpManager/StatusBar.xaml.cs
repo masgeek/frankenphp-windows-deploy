@@ -5,38 +5,48 @@ namespace PhpManager;
 
 public partial class StatusBar : UserControl
 {
-    public string StatusMessage
-    {
-        get => StatusText.Text;
-        set => StatusText.Text = value;
-    }
-
-    public bool IsLoading
-    {
-        get => (bool)GetValue(IsLoadingProperty);
-        set => SetValue(IsLoadingProperty, value);
-    }
-
-    public static readonly DependencyProperty IsLoadingProperty =
-        DependencyProperty.Register(nameof(IsLoading), typeof(bool), typeof(StatusBar),
-            new PropertyMetadata(false, OnIsLoadingChanged));
-
-    private static void OnIsLoadingChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is StatusBar bar)
-        {
-            bar.Spinner.Visibility = (bool)e.NewValue ? Visibility.Visible : Visibility.Collapsed;
-        }
-    }
-
     public StatusBar()
     {
         InitializeComponent();
     }
 
-    public void SetStatus(string message, bool loading = false)
+    public void SetStatus(string message, bool showProgress = false)
     {
-        StatusMessage = message;
-        IsLoading = loading;
+        Dispatcher.Invoke(() =>
+        {
+            StatusText.Text = message;
+            Spinner.Visibility = showProgress ? Visibility.Visible : Visibility.Collapsed;
+            LogBtn.Visibility = Visibility.Visible;
+        });
+
+        if (showProgress)
+            LogWindow.Log(message);
+    }
+
+    public void SetSuccess(string message)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            StatusText.Text = message;
+            Spinner.Visibility = Visibility.Collapsed;
+            LogBtn.Visibility = Visibility.Visible;
+        });
+        LogWindow.LogSuccess(message);
+    }
+
+    public void SetError(string message)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            StatusText.Text = message;
+            Spinner.Visibility = Visibility.Collapsed;
+            LogBtn.Visibility = Visibility.Visible;
+        });
+        LogWindow.LogError(message);
+    }
+
+    private void LogBtn_Click(object sender, RoutedEventArgs e)
+    {
+        LogWindow.Instance.ShowLog();
     }
 }

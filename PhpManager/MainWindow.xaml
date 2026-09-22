@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="PHP Manager" Height="700" Width="900"
         WindowStartupLocation="CenterScreen"
-        Background="#1e1e2e">
+        Background="#F3F4F6">
 
     <Grid>
         <Grid.ColumnDefinitions>
@@ -12,23 +12,27 @@
         </Grid.ColumnDefinitions>
 
         <!-- Sidebar -->
-        <Border Grid.Column="0" Background="#11111b" Padding="0,16,0,0">
+        <Border Grid.Column="0" Background="#FFFFFF" BorderBrush="#E5E7EB" BorderThickness="0,0,1,0" Padding="0,16,0,0">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
-                    <TextBlock Text="PHP Manager" Foreground="#89b4fa" FontSize="18" FontWeight="Bold" Margin="16,0,16,20"/>
+                    <TextBlock Text="PHP Manager" Foreground="#2563EB" FontSize="18" FontWeight="Bold" Margin="16,0,16,20"/>
 
                     <Button x:Name="VersionsButton" Content="Versions" Style="{StaticResource NavButton}" Tag="Versions" Click="Nav_Click"/>
                     <Button x:Name="ExtensionsButton" Content="Extensions" Style="{StaticResource NavButton}" Tag="Extensions" Click="Nav_Click"/>
                     <Button x:Name="RedisButton" Content="Redis" Style="{StaticResource NavButton}" Tag="Redis" Click="Nav_Click"/>
                     <Button x:Name="SqlServerButton" Content="SQL Server" Style="{StaticResource NavButton}" Tag="SqlServer" Click="Nav_Click"/>
+                    <Button x:Name="FrankenPhpButton" Content="FrankenPHP" Style="{StaticResource NavButton}" Tag="FrankenPhp" Click="Nav_Click"/>
+                    <Button x:Name="ServyButton" Content="Servy" Style="{StaticResource NavButton}" Tag="Servy" Click="Nav_Click"/>
+                    <Button x:Name="UrlsButton" Content="URLs" Style="{StaticResource NavButton}" Tag="Urls" Click="Nav_Click"/>
                     <Button x:Name="ConfigButton" Content="Configuration" Style="{StaticResource NavButton}" Tag="Config" Click="Nav_Click"/>
                     <Button x:Name="CacertButton" Content="CA Certificate" Style="{StaticResource NavButton}" Tag="Cacert" Click="Nav_Click"/>
+                    <Button x:Name="SettingsButton" Content="Settings" Style="{StaticResource NavButton}" Tag="Settings" Click="Nav_Click"/>
                 </StackPanel>
             </ScrollViewer>
         </Border>
 
         <!-- Content -->
-        <Border Grid.Column="1" Background="#1e1e2e" Padding="24">
+        <Border Grid.Column="1" Background="#F3F4F6" Padding="24">
             <Grid x:Name="ContentArea"/>
         </Border>
     </Grid>

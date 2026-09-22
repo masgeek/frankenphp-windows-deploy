@@ -16,8 +16,12 @@ public partial class MainWindow : Window
         _pages["Extensions"] = new ExtensionsPage();
         _pages["Redis"] = new RedisPage();
         _pages["SqlServer"] = new SqlServerPage();
+        _pages["FrankenPhp"] = new FrankenPhpPage();
+        _pages["Servy"] = new ServyPage();
+        _pages["Urls"] = new UrlsPage();
         _pages["Config"] = new ConfigPage();
         _pages["Cacert"] = new CacertPage();
+        _pages["Settings"] = new SettingsPage();
 
         ContentArea.Children.Clear();
         ContentArea.Children.Add(_pages["Versions"]);
@@ -41,6 +45,6 @@ public partial class MainWindow : Window
             _activeNavButton.Background = Brushes.Transparent;
 
         _activeNavButton = button;
-        _activeNavButton.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#313244"));
+        _activeNavButton.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E8E8E8"));
     }
 }

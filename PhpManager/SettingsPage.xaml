@@ -1,0 +1,54 @@
+<UserControl x:Class="PhpManager.SettingsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:PhpManager">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="8">
+            <TextBlock Text="Settings" Style="{StaticResource HeaderText}" Margin="0,0,0,16"/>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="PHP Installation Path" Style="{StaticResource SubText}" Margin="0,0,0,8"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="BasePathBox" Grid.Column="0" Background="#FFFFFF" Foreground="#1F2937"
+                                 BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14" VerticalAlignment="Center"/>
+                        <Button x:Name="BrowseBaseBtn" Grid.Column="1" Content="..." Style="{StaticResource ActionButton}"
+                                Margin="8,0,0,0" Padding="12,6" Click="BrowseBase_Click"/>
+                    </Grid>
+                    <TextBlock Text="Directory where PHP versions are stored (e.g. C:\PHP)." Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="FrankenPHP Path" Style="{StaticResource SubText}" Margin="0,0,0,8"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="FrankenPhpPathBox" Grid.Column="0" Background="#FFFFFF" Foreground="#1F2937"
+                                 BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14" VerticalAlignment="Center"/>
+                        <Button x:Name="BrowseFrankenBtn" Grid.Column="1" Content="..." Style="{StaticResource ActionButton}"
+                                Margin="8,0,0,0" Padding="12,6" Click="BrowseFranken_Click"/>
+                    </Grid>
+                    <TextBlock Text="Directory where FrankenPHP is installed (defaults to &lt;PHP path&gt;\frankenphp)." Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <WrapPanel>
+                        <Button x:Name="SaveBtn" Content="Save Settings" Style="{StaticResource ActionButton}" Click="Save_Click"/>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <local:StatusBar x:Name="StatusBar"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

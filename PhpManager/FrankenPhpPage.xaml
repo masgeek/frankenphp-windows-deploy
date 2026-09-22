@@ -1,0 +1,161 @@
+<UserControl x:Class="PhpManager.FrankenPhpPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:PhpManager">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="8">
+            <TextBlock Text="FrankenPHP" Style="{StaticResource HeaderText}" Margin="0,0,0,16"/>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="Runtime" Style="{StaticResource SubText}" Margin="0,0,0,8"/>
+                    <TextBlock x:Name="FrankenPhpStatus" Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                    <WrapPanel>
+                        <Button x:Name="InstallBtn" Content="Install / Update Runtime" Style="{StaticResource ActionButton}" Click="Install_Click"/>
+                        <Button x:Name="SetPathBtn" Content="Add to System PATH" Style="{StaticResource ActionButton}" Margin="8,0,0,0" Click="SetPath_Click"/>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="Services" Style="{StaticResource SubText}" Margin="0,0,0,8"/>
+                    <DataGrid x:Name="ServicesGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                              Background="#FFFFFF" Foreground="#1F2937" GridLinesVisibility="None"
+                              HeadersVisibility="Column" BorderBrush="#D1D5DB" BorderThickness="1"
+                              RowBackground="#FFFFFF" AlternatingRowBackground="#F9FAFB"
+                              SelectionMode="Single" SelectionChanged="ServicesGrid_SelectionChanged"
+                              CanUserAddRows="False" CanUserDeleteRows="False">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Service Name" Binding="{Binding ServiceName}" Width="160"/>
+                            <DataGridTextColumn Header="App Path" Binding="{Binding AppPath}" Width="180"/>
+                            <DataGridTextColumn Header="Port" Binding="{Binding Port}" Width="60"/>
+                            <DataGridTextColumn Header="Admin Port" Binding="{Binding AdminPort}" Width="80"/>
+                            <DataGridTextColumn Header="Workers" Binding="{Binding Workers}" Width="60"/>
+                            <DataGridTextColumn Header="Mode" Binding="{Binding Mode}" Width="80"/>
+                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="80"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock x:Name="FormTitle" Text="New Service" Style="{StaticResource SubText}" Margin="0,0,0,8"/>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                            <TextBlock Text="Service Name" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
+                            <TextBox x:Name="ServiceNameBox" Background="#FFFFFF" Foreground="#1F2937"
+                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Display Name" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
+                            <TextBox x:Name="DisplayNameBox" Background="#FFFFFF" Foreground="#1F2937"
+                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock Text="Application Path" Style="{StaticResource SubText}" Margin="0,8,0,4"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="AppPathBox" Grid.Column="0" Background="#FFFFFF" Foreground="#1F2937"
+                                 BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
+                        <Button Grid.Column="1" Content="..." Style="{StaticResource ActionButton}"
+                                Margin="8,0,0,0" Padding="12,6" Click="BrowseAppPath_Click"/>
+                    </Grid>
+
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                            <TextBlock Text="Port" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
+                            <TextBox x:Name="PortBox" Text="8001" Background="#FFFFFF" Foreground="#1F2937"
+                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                            <TextBlock Text="Admin Port" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
+                            <TextBox x:Name="AdminPortBox" Text="2020" Background="#FFFFFF" Foreground="#1F2937"
+                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Margin="0,0,8,0">
+                            <TextBlock Text="Workers" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
+                            <TextBox x:Name="WorkersBox" Text="2" Background="#FFFFFF" Foreground="#1F2937"
+                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="3">
+                            <TextBlock Text="Max Requests" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
+                            <TextBox x:Name="MaxRequestsBox" Text="250" Background="#FFFFFF" Foreground="#1F2937"
+                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                            <TextBlock Text="Health Path" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
+                            <TextBox x:Name="HealthPathBox" Text="/up" Background="#FFFFFF" Foreground="#1F2937"
+                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                            <TextBlock Text="Firewall Rule Name" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
+                            <TextBox x:Name="FirewallRuleNameBox" Background="#FFFFFF" Foreground="#1F2937"
+                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" VerticalAlignment="Bottom">
+                            <CheckBox x:Name="DevModeCheck" Content="Development" Foreground="#374151" Margin="0,0,0,6"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <WrapPanel Margin="0,12,0,0">
+                        <Button x:Name="SaveBtn" Content="Save Service" Style="{StaticResource ActionButton}" Click="Save_Click"/>
+                        <Button x:Name="CancelBtn" Content="Cancel" Background="#D1D5DB" Foreground="#374151"
+                                BorderThickness="0" Padding="16,8" Margin="8,0,0,0" Click="Cancel_Click"/>
+                        <Button x:Name="DeleteBtn" Content="Delete" Background="#DC2626" Foreground="White"
+                                BorderThickness="0" Padding="16,8" Margin="8,0,0,0" Click="Delete_Click"
+                                Visibility="Collapsed"/>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="Service Control" Style="{StaticResource SubText}" Margin="0,0,0,8"/>
+                    <WrapPanel>
+                        <Button x:Name="StartBtn" Content="Start" Style="{StaticResource ActionButton}" Click="Start_Click"/>
+                        <Button x:Name="StopBtn" Content="Stop" Background="#DC2626" Foreground="White"
+                                BorderThickness="0" Padding="16,8" Margin="8,0,0,0" Click="Stop_Click"/>
+                        <Button x:Name="RefreshBtn" Content="Refresh" Background="#D1D5DB" Foreground="#374151"
+                                BorderThickness="0" Padding="16,8" Margin="8,0,0,0" Click="Refresh_Click"/>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <local:StatusBar x:Name="StatusBar"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

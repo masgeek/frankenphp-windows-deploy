@@ -12,4 +12,8 @@
     <Description>PHP Version and Extension Manager for Windows</Description>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
+  </ItemGroup>
+
 </Project>

@@ -36,6 +36,10 @@ public partial class CacertPage : UserControl
                 Dispatcher.Invoke(() => StatusBar.SetStatus(msg, true))));
             StatusBar.SetStatus("CA certificate installed and php.ini configured.");
         }
+        catch (OperationCanceledException)
+        {
+            StatusBar.SetStatus("Download timed out. Check your network connection.");
+        }
         catch (Exception ex)
         {
             StatusBar.SetStatus($"Error: {ex.Message}");

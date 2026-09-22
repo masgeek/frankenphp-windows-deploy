@@ -9,12 +9,12 @@
             <Border Style="{StaticResource CardBorder}">
                 <StackPanel>
                     <TextBlock Text="Installed Versions" Style="{StaticResource SubText}" Margin="0,0,0,8"/>
-                    <ListBox x:Name="InstalledList" Background="#313244" Foreground="#cdd6f4" BorderThickness="0"
+                    <ListBox x:Name="InstalledList" Background="#FFFFFF" Foreground="#1F2937" BorderBrush="#D1D5DB" BorderThickness="1"
                              DisplayMemberPath="Display" Height="200"/>
                     <WrapPanel Margin="0,8,0,0">
                         <Button x:Name="RefreshBtn" Content="Refresh" Style="{StaticResource ActionButton}" Margin="0,0,8,0" Click="Refresh_Click"/>
                         <Button x:Name="SetActiveBtn" Content="Set Active" Style="{StaticResource ActionButton}" Margin="0,0,8,0" Click="SetActive_Click"/>
-                        <Button x:Name="RemoveBtn" Content="Remove" Background="#f38ba8" Click="Remove_Click"/>
+                        <Button x:Name="RemoveBtn" Content="Remove" Background="#DC2626" Foreground="White" BorderThickness="0" Padding="16,8" Click="Remove_Click"/>
                     </WrapPanel>
                     <CheckBox x:Name="SystemPathCheck" Content="Also add to system PATH (requires admin)" Style="{StaticResource DarkCheckBox}"/>
                 </StackPanel>
@@ -23,7 +23,7 @@
             <Border Style="{StaticResource CardBorder}">
                 <StackPanel>
                     <TextBlock Text="Available Versions" Style="{StaticResource SubText}" Margin="0,0,0,8"/>
-                    <ListBox x:Name="AvailableList" Background="#313244" Foreground="#cdd6f4" BorderThickness="0"
+                    <ListBox x:Name="AvailableList" Background="#FFFFFF" Foreground="#1F2937" BorderBrush="#D1D5DB" BorderThickness="1"
                              Height="150"/>
                     <WrapPanel Margin="0,8,0,0">
                         <Button x:Name="RefreshCatalogBtn" Content="Refresh Catalog" Style="{StaticResource ActionButton}" Margin="0,0,8,0" Click="RefreshCatalog_Click"/>

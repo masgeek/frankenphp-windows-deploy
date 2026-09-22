@@ -15,8 +15,8 @@
             <Border Style="{StaticResource CardBorder}">
                 <StackPanel>
                     <TextBlock Text="Driver Version" Style="{StaticResource SubText}" Margin="0,0,0,8"/>
-                    <TextBox x:Name="VersionBox" Text="5.13.3" Background="#313244" Foreground="#cdd6f4"
-                             BorderThickness="0" Padding="8,6" FontSize="14" Margin="0,0,0,12"/>
+                    <TextBox x:Name="VersionBox" Text="5.13.3" Background="#FFFFFF" Foreground="#1F2937"
+                             BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14" Margin="0,0,0,12"/>
                     <TextBlock Text="Microsoft SQL Server PHP driver version. Check https://github.com/microsoft/msphpsql/releases for latest." Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,0,0,12"/>
                     <WrapPanel>
                         <Button x:Name="InstallBtn" Content="Install SQL Server Drivers" Style="{StaticResource ActionButton}" Click="Install_Click"/>

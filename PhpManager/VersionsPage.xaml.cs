@@ -27,9 +27,10 @@ public partial class VersionsPage : UserControl
         InstalledList.ItemsSource = null;
         InstalledList.ItemsSource = _installedVersions;
         var active = PhpService.GetActiveVersion();
+        var activeLabel = active == "frankenphp" ? "FrankenPHP" : string.IsNullOrEmpty(active) ? "(none)" : active;
         StatusBar.SetStatus(_installedVersions.Count == 0
             ? "No PHP versions installed."
-            : $"{_installedVersions.Count} version(s) installed. Active: {(string.IsNullOrEmpty(active) ? "(none)" : active)}");
+            : $"{_installedVersions.Count} version(s) installed. Active: {activeLabel}");
     }
 
     private void LoadAvailable()
@@ -119,11 +120,26 @@ public partial class VersionsPage : UserControl
 
         try
         {
-            PhpService.SetActiveVersion(selected.Version);
+            var setActiveTo = selected.IsFrankenPhp ? "frankenphp" : selected.Version;
+            PhpService.SetActiveVersion(setActiveTo);
 
-            var msg = $"Switched to PHP {selected.Version}.";
+            var msg = $"Switched to {selected.Version}.";
 
-            if (SystemPathCheck.IsChecked == true)
+            if (selected.IsFrankenPhp)
+            {
+                if (PhpService.IsRunningAsAdmin())
+                {
+                    PhpService.UpdateFrankenPhpSystemPath();
+                    msg += " Added to system PATH.";
+                }
+                else if (SystemPathCheck.IsChecked == true)
+                {
+                    StatusBar.SetStatus("Requesting admin elevation for system PATH...", true);
+                    var success = PhpService.RunElevated("--set-frankenphp-path");
+                    msg += success ? " Added to system PATH." : " System PATH update cancelled (admin required).";
+                }
+            }
+            else if (SystemPathCheck.IsChecked == true)
             {
                 if (PhpService.IsRunningAsAdmin())
                 {

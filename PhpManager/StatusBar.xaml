@@ -6,15 +6,20 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <ProgressBar x:Name="Spinner" Grid.Column="0" Width="16" Height="16"
-                         IsIndeterminate="True" Visibility="Collapsed" Margin="0,0,10,0"
-                         Foreground="#89b4fa" Background="Transparent"/>
+            <ProgressBar x:Name="Spinner" Grid.Column="0" Width="24" Height="24"
+                         IsIndeterminate="True" Visibility="Collapsed" Margin="0,0,12,0"
+                         Foreground="#2563EB" Background="Transparent"/>
 
             <TextBlock x:Name="StatusText" Grid.Column="1" Text="Ready"
                        Style="{StaticResource SubText}" TextWrapping="Wrap"
                        VerticalAlignment="Center"/>
+
+            <Button x:Name="LogBtn" Grid.Column="2" Content="View Log" Background="#2563EB" Foreground="White"
+                    BorderThickness="0" Padding="12,6" FontSize="12" Margin="8,0,0,0"
+                    Click="LogBtn_Click" Visibility="Collapsed"/>
         </Grid>
     </Border>
 </UserControl>

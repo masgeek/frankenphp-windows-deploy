@@ -9,9 +9,10 @@
             <Border Style="{StaticResource CardBorder}">
                 <StackPanel>
                     <TextBlock Text="Extensions" Style="{StaticResource SubText}" Margin="0,0,0,8"/>
-                    <DataGrid x:Name="ExtensionGrid" AutoGenerateColumns="False" Background="#313244"
-                              Foreground="#cdd6f4" GridLinesVisibility="None" CanUserAddRows="False"
-                              HeadersVisibility="Column" RowBackground="#181825" AlternatingRowBackground="#1e1e2e">
+                    <DataGrid x:Name="ExtensionGrid" AutoGenerateColumns="False" Background="#FFFFFF"
+                              Foreground="#1F2937" GridLinesVisibility="None" CanUserAddRows="False"
+                              HeadersVisibility="Column" RowBackground="#FFFFFF" AlternatingRowBackground="#F9FAFB"
+                              BorderBrush="#D1D5DB" BorderThickness="1">
                         <DataGrid.Columns>
                             <DataGridCheckBoxColumn Header="Enabled" Binding="{Binding Enabled}" Width="60"/>
                             <DataGridTextColumn Header="Name" Binding="{Binding Name}" IsReadOnly="True" Width="*"/>

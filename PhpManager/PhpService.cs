@@ -15,6 +15,7 @@ public class PhpVersionInfo
     public string InstallDir { get; set; } = "";
     public bool Installed { get; set; }
     public bool Active { get; set; }
+    public bool IsFrankenPhp { get; set; }
     public string Display => Active ? $"{Version}  (active)" : Installed ? Version : $"{Version}  (incomplete)";
 }
 
@@ -29,32 +30,15 @@ public static class PhpService
 {
     public static string BasePath { get; set; } = "C:\\PHP";
 
-    private static readonly string[] DownloadUrls =
-    [
-        "https://windows.php.net/downloads/releases/php-{0}-nts-Win32-vs17-x64.zip",
-        "https://downloads.php.net/~windows/releases/php-{0}-nts-Win32-vs17-x64.zip",
-        "https://downloads.php.net/~windows/releases/archives/php-{0}-nts-Win32-vs17-x64.zip"
-    ];
+    private static readonly string[] DownloadUrls = Urls.PhpDownload.Mirrors;
 
-    private static readonly string[] CatalogUrls =
-    [
-        "https://windows.php.net/downloads/releases/",
-        "https://downloads.php.net/~windows/releases/",
-        "https://downloads.php.net/~windows/releases/archives/"
-    ];
+    private static readonly string[] CatalogUrls = Urls.PhpCatalog.Mirrors;
 
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(5) };
-
-    static PhpService()
+    private static readonly HttpClient Http = new(new HttpClientHandler
     {
-        var path = ResolveCacheFile(".php-install-path.cache");
-        if (path != null)
-        {
-            var cached = File.ReadAllText(path).Trim();
-            if (!string.IsNullOrEmpty(cached))
-                BasePath = cached;
-        }
-    }
+        AutomaticDecompression = System.Net.DecompressionMethods.All
+    })
+    { Timeout = TimeSpan.FromMinutes(5) };
 
     // --- Cache Helpers ---
 
@@ -90,14 +74,60 @@ public static class PhpService
             return "";
 
         var version = File.ReadAllText(versionFile).Trim();
-        if (!string.IsNullOrEmpty(version) && Directory.Exists(Path.Combine(BasePath, version)))
+
+        if (string.IsNullOrEmpty(version))
+            return "";
+
+        if (version == "frankenphp")
+            return IsFrankenPhpInstalled() ? "frankenphp" : "";
+
+        if (Directory.Exists(Path.Combine(BasePath, version)))
             return version;
 
         return "";
     }
 
+    public static bool IsFrankenPhpActive() => GetActiveVersion() == "frankenphp";
+
     public static void SetActiveVersion(string version, bool addToSystemPath = false)
     {
+        if (version == "frankenphp")
+        {
+            if (!IsFrankenPhpInstalled())
+                throw new FileNotFoundException("FrankenPHP not found. Install FrankenPHP first.");
+
+            File.WriteAllText(Path.Combine(BasePath, ".php-active-version"), "frankenphp", new UTF8Encoding(false));
+
+            var frankenPattern = $@"^{Regex.Escape(BasePath)}\\frankenphp\\?$";
+
+            // User PATH
+            var userPath = Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.User) ?? "";
+            var userEntries = userPath.Split(';', StringSplitOptions.RemoveEmptyEntries)
+                .Where(e => !Regex.IsMatch(e.Trim(), frankenPattern))
+                .Prepend(FrankenPhpPath)
+                .ToList();
+            Environment.SetEnvironmentVariable("Path", string.Join(";", userEntries), EnvironmentVariableTarget.User);
+
+            // Process PATH
+            var processEntries = (Environment.GetEnvironmentVariable("Path") ?? "")
+                .Split(';', StringSplitOptions.RemoveEmptyEntries)
+                .Where(e => !Regex.IsMatch(e.Trim(), frankenPattern))
+                .Prepend(FrankenPhpPath)
+                .ToList();
+            Environment.SetEnvironmentVariable("Path", string.Join(";", processEntries));
+
+            // PHPRC + FRANKENPHP_EXT_DIR
+            var frankenIni = Path.Combine(FrankenPhpPath, "php.ini");
+            if (File.Exists(frankenIni))
+                Environment.SetEnvironmentVariable("PHPRC", frankenIni);
+            Environment.SetEnvironmentVariable("FRANKENPHP_EXT_DIR", FrankenPhpPath);
+
+            if (addToSystemPath && IsRunningAsAdmin())
+                UpdateFrankenPhpSystemPath();
+
+            return;
+        }
+
         var versionDir = Path.Combine(BasePath, version);
         if (!Directory.Exists(versionDir))
             throw new DirectoryNotFoundException($"PHP {version} not found at {versionDir}");
@@ -111,22 +141,26 @@ public static class PhpService
         var versionPattern = $@"^{Regex.Escape(BasePath)}\\[\d\.]+\\?$";
 
         // User PATH
-        var userPath = Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.User) ?? "";
-        var userEntries = userPath.Split(';', StringSplitOptions.RemoveEmptyEntries)
+        var regUserPath = Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.User) ?? "";
+        var regUserEntries = regUserPath.Split(';', StringSplitOptions.RemoveEmptyEntries)
             .Where(e => !Regex.IsMatch(e.Trim(), versionPattern))
             .Prepend(versionDir)
             .ToList();
-        Environment.SetEnvironmentVariable("Path", string.Join(";", userEntries), EnvironmentVariableTarget.User);
+        Environment.SetEnvironmentVariable("Path", string.Join(";", regUserEntries), EnvironmentVariableTarget.User);
 
         // Process PATH
-        var processEntries = (Environment.GetEnvironmentVariable("Path") ?? "")
+        var regProcessEntries = (Environment.GetEnvironmentVariable("Path") ?? "")
             .Split(';', StringSplitOptions.RemoveEmptyEntries)
             .Where(e => !Regex.IsMatch(e.Trim(), versionPattern))
             .Prepend(versionDir)
             .ToList();
-        Environment.SetEnvironmentVariable("Path", string.Join(";", processEntries));
+        Environment.SetEnvironmentVariable("Path", string.Join(";", regProcessEntries));
 
+        // PHPRC
         Environment.SetEnvironmentVariable("PHPRC", Path.Combine(versionDir, "php.ini"));
+
+        // Clear FRANKENPHP_EXT_DIR (regular PHP uses ext/ subdir, not FRANKENPHP_EXT_DIR)
+        Environment.SetEnvironmentVariable("FRANKENPHP_EXT_DIR", "");
 
         // System PATH (requires admin)
         if (addToSystemPath && IsRunningAsAdmin())
@@ -146,8 +180,21 @@ public static class PhpService
             return [];
 
         var activeVersion = GetActiveVersion();
+        var versions = new List<PhpVersionInfo>();
 
-        return Directory.GetDirectories(BasePath)
+        if (IsFrankenPhpInstalled())
+        {
+            versions.Add(new PhpVersionInfo
+            {
+                Version = "FrankenPHP",
+                InstallDir = FrankenPhpPath,
+                Installed = true,
+                Active = activeVersion == "frankenphp",
+                IsFrankenPhp = true
+            });
+        }
+
+        versions.AddRange(Directory.GetDirectories(BasePath)
             .Select(dir => Path.GetFileName(dir))
             .Where(name => Regex.IsMatch(name, @"^\d+\.\d+\.\d+$"))
             .Select(name => new PhpVersionInfo
@@ -156,9 +203,9 @@ public static class PhpService
                 InstallDir = Path.Combine(BasePath, name),
                 Installed = File.Exists(Path.Combine(BasePath, name, "php.exe")),
                 Active = name == activeVersion
-            })
-            .OrderByDescending(v => Version.Parse(v.Version))
-            .ToList();
+            }));
+
+        return versions.OrderByDescending(v => v.IsFrankenPhp).ThenByDescending(v => v.Version).ToList();
     }
 
     public static List<string> GetAvailableVersions()
@@ -219,16 +266,20 @@ public static class PhpService
             try
             {
                 progress?.Report($"Downloading from {url}...");
-                var response = await Http.GetAsync(url);
+                LogWindow.LogDownload(url);
+                var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
                 response.EnsureSuccessStatusCode();
+                await using var stream = await response.Content.ReadAsStreamAsync();
                 await using var fs = File.Create(archive);
-                await response.Content.CopyToAsync(fs);
+                await stream.CopyToAsync(fs);
                 progress?.Report("Download complete.");
+                LogWindow.LogSuccess($"PHP {version} download complete.");
                 break;
             }
             catch (Exception ex)
             {
                 progress?.Report($"Failed: {ex.Message}");
+                LogWindow.LogWarn($"Download failed from {url}: {ex.Message}");
             }
         }
 
@@ -236,9 +287,11 @@ public static class PhpService
             throw new Exception($"Unable to download PHP {version} from any configured URL.");
 
         progress?.Report("Extracting...");
+        LogWindow.LogExtract(targetDir);
         ZipFile.ExtractToDirectory(archive, targetDir, overwriteFiles: true);
         File.Delete(archive);
         progress?.Report("Extraction complete.");
+        LogWindow.LogSuccess($"PHP {version} extracted to {targetDir}");
     }
 
     // --- Catalog ---
@@ -253,7 +306,7 @@ public static class PhpService
             {
                 progress?.Report($"Reading {indexUrl}...");
                 var html = await Http.GetStringAsync(indexUrl);
-                foreach (Match m in Regex.Matches(html, @"php-(\d+\.\d+\.\d+)-nts-Win32-vs17-x64\.zip", RegexOptions.IgnoreCase))
+                foreach (Match m in Regex.Matches(html, Urls.PhpCatalog.RegexPattern, RegexOptions.IgnoreCase))
                     allVersions.Add(m.Groups[1].Value);
             }
             catch (Exception ex)
@@ -362,10 +415,17 @@ public static class PhpService
         if (!File.Exists(cacertDest))
         {
             progress?.Report("Downloading cacert.pem...");
-            var response = await Http.GetAsync("https://curl.se/ca/cacert.pem");
+            LogWindow.LogDownload(Urls.Cacert.DownloadUrl);
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+            var response = await Http.GetAsync(Urls.Cacert.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, cts.Token);
             response.EnsureSuccessStatusCode();
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cts.Token);
             await using var fs = File.Create(cacertDest);
-            await response.Content.CopyToAsync(fs);
+            await stream.CopyToAsync(fs, cts.Token);
+
+            LogWindow.LogSuccess("cacert.pem downloaded.");
         }
 
         if (!File.Exists(phpIni))
@@ -379,6 +439,7 @@ public static class PhpService
 
         File.WriteAllText(phpIni, content, new UTF8Encoding(false));
         progress?.Report("CA certificate configured.");
+        LogWindow.LogSuccess("CA certificate configured in php.ini.");
     }
 
     // --- PHP Execution ---
@@ -557,7 +618,7 @@ public static class PhpService
 
         var (majorMinor, threadSafety, architecture, compiler) = GetPhpBuildInfo(version);
         var package = $"php_redis-{extensionVersion}-{majorMinor}-{threadSafety}-{compiler}-{architecture}";
-        var downloadUrl = $"https://windows.php.net/downloads/pecl/releases/redis/{extensionVersion}/{package}.zip";
+        var downloadUrl = Urls.Redis.DownloadUrl(extensionVersion, majorMinor, threadSafety, compiler, architecture);
 
         await DownloadExtractEnablePackage(downloadUrl, package, installDir, extDir, phpIni,
             "redis", ["redis"], progress, $"Redis extension {extensionVersion}");
@@ -578,7 +639,7 @@ public static class PhpService
             throw new DirectoryNotFoundException($"Extension directory not found at {extDir}");
 
         var (majorMinor, threadSafety, architecture, _) = GetPhpBuildInfo(version);
-        var downloadUrl = $"https://github.com/microsoft/msphpsql/releases/download/v{driverVersion}/Windows_{driverVersion}RTW.zip";
+        var downloadUrl = Urls.SqlServer.DownloadUrl(driverVersion);
         var archive = Path.Combine(Path.GetTempPath(), $"msphpsql-{driverVersion}.zip");
         var extractPath = Path.Combine(Path.GetTempPath(), $"msphpsql-{driverVersion}");
 
@@ -616,7 +677,429 @@ public static class PhpService
         }
     }
 
-    // --- Helpers ---
+    // --- Settings ---
+
+    private static readonly string SettingsFile = Path.Combine(AppContext.BaseDirectory, "settings.json");
+
+    public static string FrankenPhpPath { get; set; } = "";
+
+    public class AppSettings
+    {
+        public string BasePath { get; set; } = "C:\\PHP";
+        public string FrankenPhpPath { get; set; } = "";
+    }
+
+    public static AppSettings LoadSettings()
+    {
+        try
+        {
+            if (File.Exists(SettingsFile))
+                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(SettingsFile)) ?? new AppSettings();
+        }
+        catch { }
+        return new AppSettings();
+    }
+
+    public static void SaveSettings(AppSettings settings)
+    {
+        File.WriteAllText(SettingsFile, JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
+        BasePath = settings.BasePath;
+        FrankenPhpPath = settings.FrankenPhpPath;
+    }
+
+    static PhpService()
+    {
+        var settings = LoadSettings();
+        if (!string.IsNullOrEmpty(settings.BasePath))
+            BasePath = settings.BasePath;
+        if (!string.IsNullOrEmpty(settings.FrankenPhpPath))
+            FrankenPhpPath = settings.FrankenPhpPath;
+
+        if (string.IsNullOrEmpty(FrankenPhpPath))
+            FrankenPhpPath = Path.Combine(BasePath, "frankenphp");
+
+        FrankenPhpDatabase.Initialize();
+    }
+
+    // --- FrankenPHP ---
+
+    public static string FrankenPhpExe => Path.Combine(FrankenPhpPath, "frankenphp.exe");
+
+    public static bool IsFrankenPhpInstalled() => File.Exists(FrankenPhpExe);
+
+    public static string GetFrankenPhpVersion()
+    {
+        if (!File.Exists(FrankenPhpExe))
+            return "";
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = FrankenPhpExe,
+                Arguments = "version",
+                WorkingDirectory = FrankenPhpPath,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var process = Process.Start(psi)!;
+            var output = process.StandardOutput.ReadLine() ?? "";
+            process.WaitForExit();
+            return output.Trim();
+        }
+        catch { return ""; }
+    }
+
+    public static async Task InstallFrankenPhpAsync(string version = "latest", IProgress<string>? progress = null)
+    {
+        Directory.CreateDirectory(FrankenPhpPath);
+
+        var url = Urls.FrankenPhp.DownloadUrl(version);
+        var archive = Path.Combine(Path.GetTempPath(), "frankenphp.zip");
+
+        try
+        {
+            progress?.Report($"Downloading FrankenPHP from {url}...");
+            LogWindow.LogDownload(url);
+            var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+            response.EnsureSuccessStatusCode();
+            await using (var stream = await response.Content.ReadAsStreamAsync())
+            await using (var fs = File.Create(archive))
+                await stream.CopyToAsync(fs);
+
+            progress?.Report("Extracting...");
+            LogWindow.LogExtract(FrankenPhpPath);
+            ZipFile.ExtractToDirectory(archive, FrankenPhpPath, overwriteFiles: true);
+            progress?.Report("FrankenPHP installed.");
+            LogWindow.LogSuccess("FrankenPHP runtime installed.");
+        }
+        finally
+        {
+            if (File.Exists(archive)) File.Delete(archive);
+        }
+    }
+
+    public static async Task<FrankenPhpServiceRecord> InstallFrankenPhpServiceAsync(FrankenPhpServiceRecord record, IProgress<string>? progress = null)
+    {
+        if (!File.Exists(FrankenPhpExe))
+            throw new FileNotFoundException("frankenphp.exe not found. Install FrankenPHP first.");
+
+        if (record.Port == record.AdminPort)
+            throw new ArgumentException("Public and admin ports must be different.");
+
+        FrankenPhpDatabase.Initialize();
+        if (FrankenPhpDatabase.ExistsByServiceName(record.ServiceName, record.Id > 0 ? record.Id : null))
+            throw new ArgumentException($"Service '{record.ServiceName}' already exists.");
+        if (FrankenPhpDatabase.PortInUse(record.Port, record.Id > 0 ? record.Id : null))
+            throw new ArgumentException($"Port {record.Port} is already in use by another service.");
+        if (FrankenPhpDatabase.PortInUse(record.AdminPort, record.Id > 0 ? record.Id : null))
+            throw new ArgumentException($"Admin port {record.AdminPort} is already in use by another service.");
+
+        var serviceDir = Path.Combine(FrankenPhpPath, "services", record.ServiceName);
+        Directory.CreateDirectory(serviceDir);
+        Directory.CreateDirectory(Path.Combine(serviceDir, "logs"));
+
+        var caddyfile = Path.Combine(serviceDir, "Caddyfile");
+        var publicPath = Path.Combine(record.AppPath, "public");
+        var appEnv = record.IsDevelopment ? "local" : "production";
+        var appDebug = record.IsDevelopment ? "true" : "false";
+
+        var caddyContent = $@"{{
+    admin 127.0.0.1:{record.AdminPort}
+    auto_https off
+
+    frankenphp {{
+        worker {{
+            file ""{publicPath.Replace("\\", "/")}/frankenphp-worker.php""
+            num {record.Workers}
+        }}
+    }}
+}}
+
+:{record.Port} {{
+    root * ""{publicPath.Replace("\\", "/")}""
+    encode zstd br gzip
+
+    log {{
+        level WARN
+        format json
+    }}
+
+    php_server {{
+        index frankenphp-worker.php
+        try_files {{path}} frankenphp-worker.php
+        resolve_root_symlink
+    }}
+}}
+";
+        File.WriteAllText(caddyfile, caddyContent, new UTF8Encoding(false));
+        progress?.Report("Caddyfile written.");
+
+        var phpVersion = GetActiveVersion();
+        var phpDir = string.IsNullOrEmpty(phpVersion) ? "" : Path.Combine(BasePath, phpVersion);
+        var extDir = string.IsNullOrEmpty(phpDir) ? "" : Path.Combine(phpDir, "ext");
+        var phpIni = string.IsNullOrEmpty(phpDir) ? "" : Path.Combine(phpDir, "php.ini");
+
+        var envVars = new Dictionary<string, string>
+        {
+            ["APP_ENV"] = appEnv,
+            ["APP_DEBUG"] = appDebug,
+            ["APP_BASE_PATH"] = record.AppPath,
+            ["APP_PUBLIC_PATH"] = publicPath,
+            ["LARAVEL_OCTANE"] = "1",
+            ["MAX_REQUESTS"] = record.MaxRequests.ToString(),
+            ["REQUEST_MAX_EXECUTION_TIME"] = "30",
+            ["OCTANE_PORT"] = record.Port.ToString(),
+            ["OCTANE_ADMIN_PORT"] = record.AdminPort.ToString(),
+            ["OCTANE_WORKERS"] = record.Workers.ToString()
+        };
+        if (!string.IsNullOrEmpty(phpIni)) envVars["PHPRC"] = phpIni;
+        if (!string.IsNullOrEmpty(extDir)) envVars["FRANKENPHP_EXT_DIR"] = extDir;
+
+        var envStr = string.Join(";", envVars.Select(kv => $"{kv.Key}={kv.Value}"));
+        var processParams = $"run --config \"{caddyfile}\"";
+
+        var displayName = string.IsNullOrEmpty(record.DisplayName) ? $"FrankenPHP - {record.ServiceName}" : record.DisplayName;
+        var description = string.IsNullOrEmpty(record.Description) ? "FrankenPHP and Laravel Octane service." : record.Description;
+
+        var servyArgs = $"install --name=\"{record.ServiceName}\" " +
+            $"--displayName=\"{displayName}\" " +
+            $"--description=\"{description}\" " +
+            $"--path=\"{FrankenPhpExe}\" " +
+            $"--startupDir=\"{record.AppPath}\" " +
+            "--startupType=Automatic --priority=Normal " +
+            "--startTimeout=30 --stopTimeout=30 " +
+            $"--stdout=\"{Path.Combine(serviceDir, "logs", "stdout.log")}\" " +
+            $"--stderr=\"{Path.Combine(serviceDir, "logs", "stderr.log")}\" " +
+            "--enableSizeRotation --rotationSize=10 --maxRotations=8 " +
+            "--enableHealth --heartbeatInterval=10 --maxFailedChecks=3 " +
+            "--recoveryAction=RestartProcess --recoveryOnCleanExit " +
+            "--maxRestartAttempts=5 " +
+            $"--environment=\"{envStr}\" " +
+            $"--processParameters=\"{processParams}\" " +
+            "--quiet";
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "servy-cli",
+            Arguments = servyArgs,
+            WorkingDirectory = FrankenPhpPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var process = Process.Start(psi)!;
+        var output = await process.StandardOutput.ReadToEndAsync();
+        var error = await process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+
+        if (process.ExitCode != 0)
+            throw new Exception($"servy-cli install failed: {error}");
+
+        if (record.Id > 0)
+            FrankenPhpDatabase.Update(record);
+        else
+            record = FrankenPhpDatabase.Insert(record);
+
+        progress?.Report($"Service '{record.ServiceName}' installed.");
+        LogWindow.LogService(record.ServiceName, "installed via servy-cli");
+        return record;
+    }
+
+    public static async Task RemoveFrankenPhpServiceAsync(FrankenPhpServiceRecord record, IProgress<string>? progress)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "servy-cli",
+            Arguments = $"uninstall --name=\"{record.ServiceName}\" --quiet",
+            WorkingDirectory = FrankenPhpPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var process = Process.Start(psi)!;
+        await process.WaitForExitAsync();
+
+        FrankenPhpDatabase.Delete(record.Id);
+        progress?.Report($"Service '{record.ServiceName}' removed.");
+        LogWindow.LogService(record.ServiceName, "removed");
+    }
+
+    public static async Task StartFrankenPhpServiceAsync(FrankenPhpServiceRecord record, IProgress<string>? progress)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "servy-cli",
+            Arguments = $"start --name=\"{record.ServiceName}\" --quiet",
+            WorkingDirectory = FrankenPhpPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var process = Process.Start(psi)!;
+        await process.WaitForExitAsync();
+        progress?.Report($"Service '{record.ServiceName}' started.");
+        LogWindow.LogService(record.ServiceName, "started");
+    }
+
+    public static async Task StopFrankenPhpServiceAsync(FrankenPhpServiceRecord record, IProgress<string>? progress)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "servy-cli",
+            Arguments = $"stop --name=\"{record.ServiceName}\" --quiet",
+            WorkingDirectory = FrankenPhpPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var process = Process.Start(psi)!;
+        await process.WaitForExitAsync();
+        progress?.Report($"Service '{record.ServiceName}' stopped.");
+        LogWindow.LogService(record.ServiceName, "stopped");
+    }
+
+    public static bool IsServiceRunning(string serviceName)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "servy-cli",
+                Arguments = $"status --name=\"{serviceName}\"",
+                WorkingDirectory = FrankenPhpPath,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(psi)!;
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+            return output.Contains("running", StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+    }
+
+    public static bool IsServyInstalled()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "servy-cli",
+                Arguments = "version",
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var process = Process.Start(psi)!;
+            process.WaitForExit();
+            return process.ExitCode == 0;
+        }
+        catch { return false; }
+    }
+
+    public static async Task InstallServyAsync(IProgress<string>? progress = null)
+    {
+        var servyDir = Path.Combine(FrankenPhpPath, "servy");
+        Directory.CreateDirectory(servyDir);
+        var servyExe = Path.Combine(servyDir, "servy-cli.exe");
+        var url = Urls.Servy.DownloadUrl;
+        var archive = Path.Combine(Path.GetTempPath(), "servy-cli.zip");
+        var extractPath = Path.Combine(Path.GetTempPath(), "servy-cli-extract");
+
+        try
+        {
+            progress?.Report("Downloading servy-cli...");
+            LogWindow.LogDownload(url);
+            var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+            response.EnsureSuccessStatusCode();
+            await using (var stream = await response.Content.ReadAsStreamAsync())
+            await using (var fs = File.Create(archive))
+                await stream.CopyToAsync(fs);
+
+            progress?.Report("Extracting servy-cli...");
+            LogWindow.LogExtract(servyDir);
+            ZipFile.ExtractToDirectory(archive, extractPath, overwriteFiles: true);
+
+            var exe = Directory.GetFiles(extractPath, "servy-cli.exe", SearchOption.AllDirectories).FirstOrDefault();
+            if (exe == null)
+                throw new FileNotFoundException("servy-cli.exe not found in downloaded package.");
+
+            File.Copy(exe, servyExe, overwrite: true);
+
+            // Add to user PATH
+            var userPath = Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.User) ?? "";
+            if (!userPath.Contains(servyDir, StringComparison.OrdinalIgnoreCase))
+            {
+                var entries = userPath.Split(';', StringSplitOptions.RemoveEmptyEntries).Prepend(servyDir).ToList();
+                Environment.SetEnvironmentVariable("Path", string.Join(";", entries), EnvironmentVariableTarget.User);
+            }
+
+            progress?.Report("servy-cli installed successfully.");
+            LogWindow.LogSuccess("servy-cli installed.");
+        }
+        finally
+        {
+            CleanupTemp(archive, extractPath);
+        }
+    }
+
+    public static void UpdateFrankenPhpSystemPath()
+    {
+        if (!Directory.Exists(FrankenPhpPath))
+            throw new DirectoryNotFoundException($"FrankenPHP not found at {FrankenPhpPath}");
+
+        var escapedBase = Regex.Escape(BasePath);
+        var pattern = $@"^{escapedBase}\\frankenphp\\?$";
+
+        var machinePath = Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.Machine) ?? "";
+        var entries = machinePath.Split(';', StringSplitOptions.RemoveEmptyEntries)
+            .Where(e => !Regex.IsMatch(e.Trim(), pattern))
+            .Prepend(FrankenPhpPath)
+            .ToList();
+        Environment.SetEnvironmentVariable("Path", string.Join(";", entries), EnvironmentVariableTarget.Machine);
+
+        Environment.SetEnvironmentVariable("FRANKENPHP_EXT_DIR", FrankenPhpPath, EnvironmentVariableTarget.Machine);
+    }
+
+    public static (string Output, string Error, int ExitCode) RunFrankenPhp(string args)
+    {
+        if (!File.Exists(FrankenPhpExe))
+            return ("", "frankenphp.exe not found.", 1);
+
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = FrankenPhpExe,
+                Arguments = args,
+                WorkingDirectory = FrankenPhpPath,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var process = Process.Start(psi)!;
+            var output = process.StandardOutput.ReadToEnd();
+            var error = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            return (output, error, process.ExitCode);
+        }
+        catch (Exception ex)
+        {
+            return ("", ex.Message, 1);
+        }
+    }
 
     public static void UpdateSystemPathElevated(string versionDir)
     {
@@ -663,12 +1146,15 @@ public static class PhpService
         try
         {
             progress?.Report($"Downloading {label} from {downloadUrl}...");
-            var response = await Http.GetAsync(downloadUrl);
+            LogWindow.LogDownload(downloadUrl);
+            var response = await Http.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();
+            await using (var stream = await response.Content.ReadAsStreamAsync())
             await using (var fs = File.Create(archive))
-                await response.Content.CopyToAsync(fs);
+                await stream.CopyToAsync(fs);
 
             progress?.Report("Extracting...");
+            LogWindow.LogExtract(extractPath);
             ZipFile.ExtractToDirectory(archive, extractPath, overwriteFiles: true);
 
             var mainDll = Path.Combine(extractPath, $"php_{extensionName}.dll");
@@ -695,6 +1181,7 @@ public static class PhpService
             }
 
             progress?.Report($"{label} installed successfully.");
+            LogWindow.LogSuccess($"{label} installed and verified.");
         }
         finally
         {
@@ -744,7 +1231,18 @@ public static class PhpService
         if (string.IsNullOrEmpty(activeVersion))
             return ("", "No active PHP version.", 1);
 
-        var phpExe = Path.Combine(BasePath, activeVersion, "php.exe");
+        string phpExe;
+
+        if (activeVersion == "frankenphp")
+        {
+            // FrankenPHP embeds PHP — use the bundled php.exe
+            phpExe = Path.Combine(FrankenPhpPath, "php.exe");
+        }
+        else
+        {
+            phpExe = Path.Combine(BasePath, activeVersion, "php.exe");
+        }
+
         if (!File.Exists(phpExe))
             return ("", $"php.exe not found at {phpExe}", 1);
 
