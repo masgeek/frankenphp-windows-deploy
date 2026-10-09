@@ -1,0 +1,42 @@
+<UserControl x:Class="PhpManager.RedisPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:PhpManager">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="8">
+            <TextBlock Text="Redis Extension" Style="{StaticResource HeaderText}" Margin="0,0,0,16"/>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource SubText}" TextWrapping="Wrap"
+                               Text="Downloads and installs php_redis.dll from windows.php.net. The DLL is always installed under the canonical name php_redis.dll."/>
+                    <TextBlock x:Name="DocsLink" Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="Version" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <ComboBox x:Name="VersionBox" Grid.Column="0" Text="6.3.0" IsEditable="True"
+                                  Background="#FFFFFF" Foreground="#1F2937"
+                                  BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
+                        <Button x:Name="RefreshVersionsBtn" Grid.Column="1" Content="Fetch versions" Background="#D1D5DB" Foreground="#374151"
+                                BorderThickness="0" Padding="12,6" Margin="8,0,0,0" Click="RefreshVersions_Click"/>
+                    </Grid>
+                    <TextBlock Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Text="The package is matched to your PHP build automatically (version, thread safety, compiler, architecture)."/>
+                    <WrapPanel Margin="0,12,0,0">
+                        <Button x:Name="InstallBtn" Content="Install Redis" Style="{StaticResource ActionButton}" Click="Install_Click"/>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <local:StatusBar x:Name="StatusBar"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,33 @@
+<UserControl x:Class="PhpManager.SqlServerPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:PhpManager">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="8">
+            <TextBlock Text="SQL Server Drivers" Style="{StaticResource HeaderText}" Margin="0,0,0,16"/>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource SubText}" TextWrapping="Wrap"
+                               Text="Downloads and installs php_sqlsrv.dll and php_pdo_sqlsrv.dll from Microsoft. Both are installed under their canonical names."/>
+                    <TextBlock x:Name="DocsLink" Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="Driver Version" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
+                    <TextBox x:Name="VersionBox" Text="5.13.3" Background="#FFFFFF" Foreground="#1F2937"
+                             BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
+                    <TextBlock Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Text="Check the releases page for the latest driver version."/>
+                    <WrapPanel Margin="0,12,0,0">
+                        <Button x:Name="InstallBtn" Content="Install SQL Server Drivers" Style="{StaticResource ActionButton}" Click="Install_Click"/>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <local:StatusBar x:Name="StatusBar"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,92 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. 1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Determine version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $ver = "${{ github.ref_name }}"
+          } else {
+            $ver = "${{ github.event.inputs.version }}"
+          }
+          if (-not $ver) { $ver = "0.0.0" }
+          Write-Host "Version: $ver"
+          echo "version=$ver" >> $env:GITHUB_OUTPUT
+
+      - name: Update version in csproj
+        shell: pwsh
+        run: |
+          $xml = Get-Content "PhpManager/PhpManager.csproj" -Raw
+          $xml = $xml -replace '<Version>.*?</Version>', ''
+          $xml = $xml -replace '<PackageVersion>.*?</PackageVersion>', ''
+          $xml = $xml -replace '<AssemblyVersion>.*?</AssemblyVersion>', ''
+          $xml = $xml -replace '<FileVersion>.*?</FileVersion>', ''
+          $xml = $xml.Replace('</PropertyGroup>', "    <Version>${{ steps.version.outputs.version }}</Version>`n    <AssemblyVersion>${{ steps.version.outputs.version }}.0</AssemblyVersion>`n    <FileVersion>${{ steps.version.outputs.version }}.0</FileVersion>`n  </PropertyGroup>")
+          Set-Content "PhpManager/PhpManager.csproj" $xml -NoNewline
+
+      - name: Publish
+        run: >
+          dotnet publish PhpManager/PhpManager.csproj
+          -c Release
+          -r win-x64
+          --self-contained
+          -p:PublishSingleFile=true
+          -p:Version=${{ steps.version.outputs.version }}
+          -o publish
+
+      - name: Package
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "publish/*" -DestinationPath "php-manager-${{ steps.version.outputs.version }}-win-x64.zip"
+          Get-Item "php-manager-${{ steps.version.outputs.version }}-win-x64.zip" | Select-Object Name, Length
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: PHP Manager ${{ steps.version.outputs.version }}
+          body: |
+            ## PHP Manager ${{ steps.version.outputs.version }}
+
+            ### Downloads
+            - **php-manager-${{ steps.version.outputs.version }}-win-x64.zip** — Self-contained, no dependencies required.
+
+            ### Features
+            - Install, switch, remove PHP versions
+            - Extension manager with verify loaded
+            - Redis and SQL Server extension installer
+            - php.ini configuration (dev/prod)
+            - CA certificate bundle setup
+            - System PATH management with admin elevation
+          files: |
+            php-manager-${{ steps.version.outputs.version }}-win-x64.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

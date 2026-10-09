@@ -1,0 +1,27 @@
+<UserControl x:Class="PhpManager.CacertPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:PhpManager">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="8">
+            <TextBlock Text="CA Certificate" Style="{StaticResource HeaderText}" Margin="0,0,0,16"/>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="Downloads cacert.pem from curl.se and configures php.ini" Style="{StaticResource SubText}" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="Enables SSL/TLS certificate verification for PHP extensions like curl and openssl." Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+                    <WrapPanel>
+                        <Button x:Name="InstallBtn" Content="Install CA Certificate" Style="{StaticResource ActionButton}" Click="Install_Click"/>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <local:StatusBar x:Name="StatusBar"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
