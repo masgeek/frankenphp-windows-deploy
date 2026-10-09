@@ -22,6 +22,7 @@
                     <Button x:Name="RedisButton" Content="Redis" Style="{StaticResource NavButton}" Tag="Redis" Click="Nav_Click"/>
                     <Button x:Name="SqlServerButton" Content="SQL Server" Style="{StaticResource NavButton}" Tag="SqlServer" Click="Nav_Click"/>
                     <Button x:Name="FrankenPhpButton" Content="FrankenPHP" Style="{StaticResource NavButton}" Tag="FrankenPhp" Click="Nav_Click"/>
+                    <Button x:Name="XdebugButton" Content="Xdebug" Style="{StaticResource NavButton}" Tag="Xdebug" Click="Nav_Click"/>
                     <Button x:Name="ServyButton" Content="Servy" Style="{StaticResource NavButton}" Tag="Servy" Click="Nav_Click"/>
                     <Button x:Name="UrlsButton" Content="URLs" Style="{StaticResource NavButton}" Tag="Urls" Click="Nav_Click"/>
                     <Button x:Name="ConfigButton" Content="Configuration" Style="{StaticResource NavButton}" Tag="Config" Click="Nav_Click"/>

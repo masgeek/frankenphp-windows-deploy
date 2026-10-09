@@ -17,6 +17,7 @@ public partial class MainWindow : Window
         _pages["Redis"] = new RedisPage();
         _pages["SqlServer"] = new SqlServerPage();
         _pages["FrankenPhp"] = new FrankenPhpPage();
+        _pages["Xdebug"] = new XdebugPage();
         _pages["Servy"] = new ServyPage();
         _pages["Urls"] = new UrlsPage();
         _pages["Config"] = new ConfigPage();

@@ -14,6 +14,8 @@ public partial class ServyPage : UserControl
 
     private void LoadStatus()
     {
+        DocsLink.Text = $"GitHub: {Urls.Docs.Link("Servy")}";
+
         if (PhpService.IsServyInstalled())
         {
             var version = GetServyVersion();

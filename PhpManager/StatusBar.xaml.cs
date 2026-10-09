@@ -10,16 +10,32 @@ public partial class StatusBar : UserControl
         InitializeComponent();
     }
 
-    public void SetStatus(string message, bool showProgress = false)
+    public void SetStatus(string message, bool showProgress = false, double? percent = null)
     {
         Dispatcher.Invoke(() =>
         {
             StatusText.Text = message;
-            Spinner.Visibility = showProgress ? Visibility.Visible : Visibility.Collapsed;
             LogBtn.Visibility = Visibility.Visible;
+
+            if (percent.HasValue)
+            {
+                Spinner.Visibility = Visibility.Collapsed;
+                Progress.Visibility = Visibility.Visible;
+                Progress.Value = percent.Value;
+            }
+            else if (showProgress)
+            {
+                Spinner.Visibility = Visibility.Visible;
+                Progress.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                Spinner.Visibility = Visibility.Collapsed;
+                Progress.Visibility = Visibility.Collapsed;
+            }
         });
 
-        if (showProgress)
+        if (showProgress || percent.HasValue)
             LogWindow.Log(message);
     }
 
@@ -29,6 +45,7 @@ public partial class StatusBar : UserControl
         {
             StatusText.Text = message;
             Spinner.Visibility = Visibility.Collapsed;
+            Progress.Visibility = Visibility.Collapsed;
             LogBtn.Visibility = Visibility.Visible;
         });
         LogWindow.LogSuccess(message);
@@ -40,6 +57,7 @@ public partial class StatusBar : UserControl
         {
             StatusText.Text = message;
             Spinner.Visibility = Visibility.Collapsed;
+            Progress.Visibility = Visibility.Collapsed;
             LogBtn.Visibility = Visibility.Visible;
         });
         LogWindow.LogError(message);

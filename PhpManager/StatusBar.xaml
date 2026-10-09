@@ -9,9 +9,14 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <ProgressBar x:Name="Spinner" Grid.Column="0" Width="24" Height="24"
-                         IsIndeterminate="True" Visibility="Collapsed" Margin="0,0,12,0"
-                         Foreground="#2563EB" Background="Transparent"/>
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                <ProgressBar x:Name="Spinner" Width="24" Height="24"
+                             IsIndeterminate="True" Visibility="Collapsed"
+                             Foreground="#2563EB" Background="Transparent"/>
+                <ProgressBar x:Name="Progress" Width="100" Height="12"
+                             Visibility="Collapsed" Foreground="#2563EB" 
+                             Background="#E5E7EB" BorderThickness="0"/>
+            </StackPanel>
 
             <TextBlock x:Name="StatusText" Grid.Column="1" Text="Ready"
                        Style="{StaticResource SubText}" TextWrapping="Wrap"

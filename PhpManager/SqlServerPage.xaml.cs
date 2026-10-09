@@ -13,6 +13,8 @@ public partial class SqlServerPage : UserControl
 
     private void LoadStatus()
     {
+        DocsLink.Text = $"Releases: {Urls.Docs.Link("SQL Server")}";
+
         var active = PhpService.GetActiveVersion();
         if (string.IsNullOrEmpty(active))
         {

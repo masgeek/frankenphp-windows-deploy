@@ -23,19 +23,19 @@ public partial class ConfigPage : UserControl
         }
 
         var phpIni = Path.Combine(PhpService.BasePath, activeVersion, "php.ini");
-        if (File.Exists(phpIni))
-        {
-            var content = File.ReadAllText(phpIni);
-            var opcacheOn = content.Contains("opcache.enable") && !Regex.IsMatch(content, @"(?m)^\s*;?\s*opcache\.enable\s*=\s*Off");
-            var displayOn = content.Contains("display_errors") && Regex.IsMatch(content, @"(?m)^\s*display_errors\s*=\s*On");
-            StatusBar.SetStatus($"PHP {activeVersion} — php.ini exists. " +
-                              $"OPcache: {(opcacheOn ? "ON" : "OFF")}, " +
-                              $"display_errors: {(displayOn ? "ON" : "OFF")}");
-        }
-        else
+        if (!File.Exists(phpIni))
         {
             StatusBar.SetStatus($"PHP {activeVersion} — no php.ini found.");
+            return;
         }
+
+        var content = File.ReadAllText(phpIni);
+        var opcacheOn = content.Contains("opcache.enable") && !Regex.IsMatch(content, @"(?m)^\s*;?\s*opcache\.enable\s*=\s*Off");
+        var displayOn = content.Contains("display_errors") && Regex.IsMatch(content, @"(?m)^\s*display_errors\s*=\s*On");
+
+        StatusBar.SetStatus($"PHP {activeVersion} — php.ini exists. " +
+                            $"OPcache: {(opcacheOn ? "ON" : "OFF")}, " +
+                            $"display_errors: {(displayOn ? "ON" : "OFF")}");
     }
 
     private void Apply_Click(object sender, RoutedEventArgs e)
@@ -47,7 +47,6 @@ public partial class ConfigPage : UserControl
             return;
         }
 
-        var phpIni = Path.Combine(PhpService.BasePath, activeVersion, "php.ini");
         var devIni = Path.Combine(AppContext.BaseDirectory, "php.ini-development");
         var prodIni = Path.Combine(AppContext.BaseDirectory, "php.ini");
 

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Net.Http.Headers;
 using System.Net.Http;
 using System.Security.Principal;
 using System.Text;
@@ -267,13 +268,8 @@ public static class PhpService
             {
                 progress?.Report($"Downloading from {url}...");
                 LogWindow.LogDownload(url);
-                var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
-                response.EnsureSuccessStatusCode();
-                await using var stream = await response.Content.ReadAsStreamAsync();
-                await using var fs = File.Create(archive);
-                await stream.CopyToAsync(fs);
-                progress?.Report("Download complete.");
-                LogWindow.LogSuccess($"PHP {version} download complete.");
+
+                await DownloadToFileAsync(url, archive, $"php-{version}-nts-x64.zip", progress);
                 break;
             }
             catch (Exception ex)
@@ -316,7 +312,9 @@ public static class PhpService
         }
 
         if (allVersions.Count == 0)
-            throw new Exception("No compatible PHP versions found in any catalog.");
+            throw new Exception(
+                "No compatible PHP versions found in any catalog. The catalogue scraper matches filenames " +
+                "derived from the primary download URL, so check that both are consistent on the URLs page.");
 
         var sorted = allVersions.OrderByDescending(v => Version.Parse(v)).ToList();
         WriteCacheFile(".php-versions.cache", JsonSerializer.Serialize(sorted));
@@ -417,14 +415,7 @@ public static class PhpService
             progress?.Report("Downloading cacert.pem...");
             LogWindow.LogDownload(Urls.Cacert.DownloadUrl);
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
-            var response = await Http.GetAsync(Urls.Cacert.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, cts.Token);
-            response.EnsureSuccessStatusCode();
-
-            await using var stream = await response.Content.ReadAsStreamAsync(cts.Token);
-            await using var fs = File.Create(cacertDest);
-            await stream.CopyToAsync(fs, cts.Token);
-
+            await DownloadToFileAsync(Urls.Cacert.DownloadUrl, cacertDest, "cacert.pem", progress);
             LogWindow.LogSuccess("cacert.pem downloaded.");
         }
 
@@ -585,7 +576,7 @@ public static class PhpService
 
         var major = versionMatch.Groups[1].Value;
         var minor = versionMatch.Groups[2].Value;
-        var majorMinor = $"{major}{minor}";
+        var majorMinor = $"{major}.{minor}";
 
         var (phpInfo, _, phpInfoExit) = RunPhp("-i", Path.Combine(BasePath, version));
         if (phpInfoExit != 0)
@@ -594,12 +585,417 @@ public static class PhpService
         var threadSafety = phpInfo.Contains("Thread Safety => enabled") ? "ts" : "nts";
         var architecture = phpInfo.Contains("Architecture => x64") ? "x64" : "x86";
 
-        var compilerMatch = Regex.Match(phpInfo, @"PHP Extension Build => .*,(VS\d+)");
-        var compiler = compilerMatch.Success
-            ? compilerMatch.Groups[1].Value.ToLowerInvariant()
-            : (int.Parse(major) * 10 + int.Parse(minor)) >= 84 ? "vs17" : "vs16";
+        // "PHP Extension Build => API20240924,VS17" gives the authoritative compiler.
+        var compilerMatch = Regex.Match(phpInfo, @"PHP Extension Build => [^\r\n]*?,\s*(VC|VS)(\d+)",
+            RegexOptions.IgnoreCase);
+
+        string compiler;
+        if (compilerMatch.Success)
+        {
+            var prefix = compilerMatch.Groups[1].Value.ToLowerInvariant();
+            var number = compilerMatch.Groups[2].Value;
+            compiler = $"{prefix}{number}";
+        }
+        else
+        {
+            var expected = int.Parse(major) switch
+            {
+                8 when int.Parse(minor) >= 4 => 17,
+                8 => 16,
+                _ => 15
+            };
+            compiler = $"{(expected >= 16 ? "vs" : "vc")}{expected}";
+        }
 
         return (majorMinor, threadSafety, architecture, compiler);
+    }
+
+    // --- URL utilities ---
+
+    /// <summary>Scrapes an Apache-style directory index and returns the version folders it lists.</summary>
+    public static async Task<List<string>> GetAvailableExtensionVersionsAsync(string indexUrl, IProgress<string>? progress = null)
+    {
+        if (string.IsNullOrWhiteSpace(indexUrl))
+            return [];
+
+        progress?.Report($"Reading version index {indexUrl}...");
+        LogWindow.Log($"Reading version index: {indexUrl}");
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        var html = await Http.GetStringAsync(indexUrl, cts.Token);
+
+        var versions = Regex.Matches(html, @"href=""(\d+(?:\.\d+)+(?:[A-Za-z]+\d*)?)/?""")
+            .Select(m => m.Groups[1].Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        versions = versions
+            .OrderByDescending(v => IsPreRelease(v) ? 1 : 0)
+            .ThenByDescending(v => ParseVersion(v))
+            .ToList();
+
+        progress?.Report($"Found {versions.Count} version(s).");
+        return versions;
+    }
+
+    private static bool IsPreRelease(string version) =>
+        Regex.IsMatch(version, @"(?i)(alpha|beta|rc|dev)");
+
+    private static Version ParseVersion(string version)
+    {
+        var core = Regex.Match(version, @"^(\d+(?:\.\d+)*)");
+        return core.Success && Version.TryParse(core.Groups[1].Value, out var v) ? v : new Version(0, 0);
+    }
+
+    public static async Task<(bool Ok, string Message)> TestUrlAsync(string url, string label)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return (false, "URL is empty.");
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return (false, "Not a valid absolute URL.");
+
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+            request.Headers.Range = new RangeHeaderValue(0, 0);
+
+            var started = DateTime.UtcNow;
+            using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token);
+            var elapsed = (DateTime.UtcNow - started).TotalMilliseconds;
+
+            var size = response.Content.Headers.ContentLength;
+            var sizeText = size.HasValue && size.Value > 0
+                ? PhpService.FormatBytes(size.Value)
+                : "size unknown";
+
+            var status = $"{(int)response.StatusCode} {response.ReasonPhrase}".Trim();
+            var ok = response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.PartialContent;
+
+            var message = $"{label}: {status} — {sizeText}, {elapsed:F0} ms";
+            if (ok)
+                LogWindow.LogSuccess(message);
+            else
+                LogWindow.LogWarn(message);
+
+            return (ok, message);
+        }
+        catch (OperationCanceledException)
+        {
+            var message = $"{label}: timed out after 30s — {url}";
+            LogWindow.LogWarn(message);
+            return (false, message);
+        }
+        catch (Exception ex)
+        {
+            var message = $"{label}: {ex.GetType().Name} — {ex.Message}";
+            LogWindow.LogError(message);
+            return (false, message);
+        }
+    }
+
+    public static async Task<(int Passed, int Failed)> TestAllUrlsAsync(IProgress<string>? progress = null)
+    {
+        var urls = UrlDatabase.GetAll();
+        var passed = 0;
+        var failed = 0;
+
+        foreach (var record in urls)
+        {
+            // Substitute placeholder tokens so the probe hits a real resource.
+            var probe = record.UrlTemplate
+                .Replace("{0}", "8.4.0")
+                .Replace("{version}", "latest")
+                .Replace("{package}", "probe")
+                .Replace("{path}", "latest/download");
+
+            if (!probe.Contains('{') && Uri.TryCreate(probe, UriKind.Absolute, out _))
+            {
+                progress?.Report($"Testing {record.Category}/{record.Key}...");
+                var (ok, message) = await TestUrlAsync(probe, $"{record.Category}/{record.Key}");
+                if (ok) passed++; else failed++;
+            }
+        }
+
+        progress?.Report($"Tested {passed + failed} URL(s): {passed} reachable, {failed} failed.");
+        return (passed, failed);
+    }
+
+    // --- Xdebug ---
+
+    /// <summary>Detects the build details of an installed PHP version, as the Xdebug wizard would.</summary>
+    public static XdebugEnvironment DetectXdebugEnvironment(string version)
+    {
+        var (output, error, exitCode) = RunPhp("-i", Path.Combine(BasePath, version));
+        if (exitCode != 0)
+            throw new Exception($"Unable to run php -i: {error}");
+
+        var env = XdebugCompatibility.Parse(output);
+
+        if (string.IsNullOrEmpty(env.PhpVersion))
+        {
+            var versionMatch = Regex.Match(output, @"^PHP (\d+\.\d+\.\d+)");
+            if (versionMatch.Success)
+            {
+                env.PhpVersion = versionMatch.Groups[1].Value;
+                env.PhpMajorMinor = env.PhpVersion[..3];
+            }
+        }
+
+        if (env.WinCompiler == 0)
+        {
+            var (majorMinor, _, _, compiler) = GetPhpBuildInfo(version);
+            env.PhpMajorMinor = string.IsNullOrEmpty(env.PhpMajorMinor) ? majorMinor : env.PhpMajorMinor;
+            env.WinCompiler = int.TryParse(compiler.TrimStart('v', 'c'), out var wc) ? wc : 17;
+        }
+
+        if (string.IsNullOrEmpty(env.ExtensionDir))
+            env.ExtensionDir = Path.Combine(BasePath, version, "ext");
+
+        env.ConfigFile = Path.Combine(BasePath, version, "php.ini");
+
+        return env;
+    }
+
+    public static bool IsXdebugInstalled(string version)
+    {
+        var extDir = Path.Combine(BasePath, version, "ext");
+        return File.Exists(Path.Combine(extDir, "php_xdebug.dll"));
+    }
+
+    public static XdebugConfig ReadXdebugConfig(string version)
+    {
+        var config = new XdebugConfig();
+        var phpIni = Path.Combine(BasePath, version, "php.ini");
+        if (!File.Exists(phpIni))
+            return config;
+
+        var content = File.ReadAllText(phpIni);
+        var section = ExtractIniSection(content, "xdebug");
+        if (string.IsNullOrEmpty(section))
+            return config;
+
+        config.Enabled = Regex.IsMatch(section, @"(?mi)^\s*zend_extension\s*=\s*xdebug");
+        config.Mode = ReadIniValue(section, "xdebug.mode") ?? config.Mode;
+        config.StartWithRequest = ReadIniValue(section, "xdebug.start_with_request") ?? config.StartWithRequest;
+        config.ClientHost = ReadIniValue(section, "xdebug.client_host") ?? config.ClientHost;
+        config.ClientPort = int.TryParse(ReadIniValue(section, "xdebug.client_port"), out var port) ? port : config.ClientPort;
+        config.IdeKey = ReadIniValue(section, "xdebug.idekey") ?? config.IdeKey;
+        config.DiscoverClientHost = ReadIniValue(section, "xdebug.discover_client_host") ?? config.DiscoverClientHost;
+        config.LogLevel = ReadIniValue(section, "xdebug.log_level") ?? config.LogLevel;
+        config.LogFile = ReadIniValue(section, "xdebug.log") ?? config.LogFile;
+        return config;
+    }
+
+    public static async Task InstallXdebugAsync(string version, string extensionVersion, IProgress<string>? progress = null)
+    {
+        var installDir = Path.Combine(BasePath, version);
+        var phpExe = Path.Combine(installDir, "php.exe");
+        var extDir = Path.Combine(installDir, "ext");
+
+        if (!File.Exists(phpExe))
+            throw new FileNotFoundException($"php.exe not found at {phpExe}");
+        if (!Directory.Exists(extDir))
+            throw new DirectoryNotFoundException($"Extension directory not found at {extDir}");
+
+        var (majorMinor, threadSafety, architecture, compiler) = GetPhpBuildInfo(version);
+        var package = $"php_xdebug-{extensionVersion}-{majorMinor}-{threadSafety}-{compiler}-{architecture}";
+        var downloadUrl = Urls.Xdebug.DownloadUrl(extensionVersion, majorMinor, threadSafety, compiler, architecture);
+        var archive = Path.Combine(Path.GetTempPath(), $"{package}.zip");
+        var extractPath = Path.Combine(Path.GetTempPath(), package);
+
+        var env = new XdebugEnvironment
+        {
+            PhpMajorMinor = majorMinor,
+            ThreadSafe = threadSafety == "ts",
+            Architecture = architecture,
+            WinCompiler = int.TryParse(compiler.TrimStart('v', 'c'), out var wc) ? wc : 17
+        };
+
+        try
+        {
+            progress?.Report($"Downloading Xdebug {extensionVersion} ({package}.zip)...");
+            LogWindow.LogDownload(downloadUrl);
+
+            await DownloadToFileAsync(downloadUrl, archive, $"{package}.zip", progress);
+
+            progress?.Report($"Extracting {package}.zip...");
+            LogWindow.LogExtract(extractPath);
+            ZipFile.ExtractToDirectory(archive, extractPath, overwriteFiles: true);
+
+            progress?.Report($"Installing {XdebugCompatibility.BuildExpectedDllName(env, extensionVersion)}...");
+            InstallExtensionDll(extractPath, extDir, "xdebug",
+                XdebugCompatibility.BuildExpectedDllName(env, extensionVersion));
+
+            LogWindow.LogSuccess($"Xdebug {extensionVersion} installed as php_xdebug.dll in {extDir}.");
+            progress?.Report($"Xdebug {extensionVersion} installed as php_xdebug.dll.");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or FileNotFoundException)
+        {
+            throw new Exception(
+                $"Xdebug {extensionVersion} is not available for PHP {majorMinor} {threadSafety.ToUpperInvariant()} {compiler} {architecture}. {ex.Message}", ex);
+        }
+        finally
+        {
+            CleanupTemp(archive, extractPath);
+        }
+    }
+
+    /// <summary>
+    /// Downloads a URL to disk, reporting verbose progress with transferred/total bytes.
+    /// </summary>
+    public static async Task DownloadToFileAsync(string url, string destination, string label, IProgress<string>? progress)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cts.Token);
+        response.EnsureSuccessStatusCode();
+
+        var total = response.Content.Headers.ContentLength;
+        var name = Path.GetFileName(destination);
+        progress?.Report($"Downloading {label} ({(total.HasValue ? FormatBytes(total.Value) : "unknown size")})...");
+
+        await using var source = await response.Content.ReadAsStreamAsync(cts.Token);
+        await using var target = File.Create(destination);
+
+        var buffer = new byte[81920];
+        long received = 0;
+        var lastReported = -1;
+
+        int read;
+        while ((read = await source.ReadAsync(buffer, cts.Token)) > 0)
+        {
+            await target.WriteAsync(buffer.AsMemory(0, read), cts.Token);
+            received += read;
+
+            if (total is > 0)
+            {
+                var percent = (int)(received * 100 / total.Value);
+                if (percent >= lastReported + 5 || percent == 100)
+                {
+                    lastReported = percent;
+                    progress?.Report($"Downloading {name}: {percent}% ({FormatBytes(received)} of {FormatBytes(total.Value)})");
+                }
+            }
+            else
+            {
+                progress?.Report($"Downloading {name}: {FormatBytes(received)}");
+            }
+        }
+
+        progress?.Report($"Downloaded {name} ({FormatBytes(received)}).");
+        LogWindow.LogSuccess($"Downloaded {label} ({FormatBytes(received)}).");
+    }
+
+    public static string FormatBytes(long bytes)
+    {
+        string[] units = { "B", "KB", "MB", "GB" };
+        double size = bytes;
+        var unit = 0;
+        while (size >= 1024 && unit < units.Length - 1)
+        {
+            size /= 1024;
+            unit++;
+        }
+        return $"{size:0.##} {units[unit]}";
+    }
+
+    /// <summary>
+    /// Locates an extension DLL inside an extracted package and installs it under its canonical,
+    /// version-free name (e.g. php_xdebug-3.5.3-8.4-nts-vs17-x86_64.dll becomes php_xdebug.dll).
+    /// </summary>
+    /// <returns>The path of the installed DLL.</returns>
+    public static string InstallExtensionDll(string extractPath, string extDir, string extensionName, string? expectedFileName = null)
+    {
+        var canonical = $"php_{extensionName}.dll";
+        var target = Path.Combine(extDir, canonical);
+
+        var candidates = Directory.GetFiles(extractPath, $"php_{extensionName}*.dll", SearchOption.AllDirectories);
+        if (candidates.Length == 0)
+            candidates = Directory.GetFiles(extractPath, "*.dll", SearchOption.AllDirectories);
+
+        if (candidates.Length == 0)
+            throw new FileNotFoundException($"{canonical} not found in downloaded package.");
+
+        // 1. Exact canonical name, 2. the build-specific name we expect, 3. newest by file name.
+        var source = candidates.FirstOrDefault(c => Path.GetFileName(c) == canonical)
+            ?? candidates.FirstOrDefault(c => expectedFileName != null &&
+                Path.GetFileName(c).Equals(expectedFileName, StringComparison.OrdinalIgnoreCase))
+            ?? candidates.OrderByDescending(c => Path.GetFileName(c), StringComparer.OrdinalIgnoreCase).First();
+
+        File.Copy(source, target, overwrite: true);
+
+        // Drop any other versioned copies of the same extension so only the canonical name remains.
+        foreach (var stray in Directory.GetFiles(extDir, $"php_{extensionName}-*.dll", SearchOption.TopDirectoryOnly))
+        {
+            try { File.Delete(stray); } catch { }
+        }
+
+        LogWindow.Log($"Installed {Path.GetFileName(source)} as {canonical}.");
+        return target;
+    }
+
+    public static void ConfigureXdebug(string version, XdebugConfig config)
+    {
+        var phpIni = Path.Combine(BasePath, version, "php.ini");
+        if (!File.Exists(phpIni))
+            throw new FileNotFoundException($"php.ini not found at {phpIni}");
+
+        var content = File.ReadAllText(phpIni);
+        var lines = new List<string> { "[xdebug]" };
+
+        if (config.Enabled)
+        {
+            lines.Add("zend_extension=xdebug");
+        }
+        else
+        {
+            lines.Add(";zend_extension=xdebug");
+            lines.Add("xdebug.mode=off");
+        }
+
+        lines.Add($"xdebug.mode={config.Mode}");
+        lines.Add($"xdebug.start_with_request={config.StartWithRequest}");
+        lines.Add($"xdebug.client_host={config.ClientHost}");
+        lines.Add($"xdebug.client_port={config.ClientPort}");
+        lines.Add($"xdebug.idekey={config.IdeKey}");
+        lines.Add($"xdebug.discover_client_host={config.DiscoverClientHost}");
+        lines.Add($"xdebug.log_level={config.LogLevel}");
+
+        if (!string.IsNullOrWhiteSpace(config.LogFile))
+            lines.Add($"xdebug.log={config.LogFile}");
+
+        content = ReplaceIniSection(content, "xdebug", string.Join("\n", lines));
+        File.WriteAllText(phpIni, content, new UTF8Encoding(false));
+        LogWindow.LogSuccess($"Xdebug configuration applied to PHP {version}.");
+    }
+
+    public static bool VerifyXdebug(string version)
+    {
+        var (output, _, exitCode) = RunPhp("--version", Path.Combine(BasePath, version));
+        return exitCode == 0 && output.Contains("Xdebug", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ExtractIniSection(string content, string section)
+    {
+        var pattern = $@"(?ms)^\[{Regex.Escape(section)}\]\s*\r?\n(.*?)(?=^\[|\z)";
+        var match = Regex.Match(content, pattern);
+        return match.Success ? match.Groups[1].Value : "";
+    }
+
+    private static string ReplaceIniSection(string content, string section, string body)
+    {
+        var pattern = $@"(?ms)^\[{Regex.Escape(section)}\]\s*\r?\n.*?(?=^\[|\z)";
+        if (Regex.IsMatch(content, pattern))
+            return Regex.Replace(content, pattern, body + "\n\n");
+
+        return content.TrimEnd() + "\n\n" + body + "\n";
+    }
+
+    private static string? ReadIniValue(string content, string key)
+    {
+        var match = Regex.Match(content, $@"(?mi)^\s*;?\s*{Regex.Escape(key)}\s*=\s*(.+?)\s*$");
+        return match.Success ? match.Groups[1].Value.Trim() : null;
     }
 
     // --- Redis Extension ---
@@ -645,25 +1041,26 @@ public static class PhpService
 
         try
         {
-            progress?.Report($"Downloading SQL Server drivers from {downloadUrl}...");
-            var response = await Http.GetAsync(downloadUrl);
-            response.EnsureSuccessStatusCode();
-            await using (var fs = File.Create(archive))
-                await response.Content.CopyToAsync(fs);
+            progress?.Report($"Downloading SQL Server drivers {driverVersion}...");
+            LogWindow.LogDownload(downloadUrl);
 
-            progress?.Report("Extracting...");
+            await DownloadToFileAsync(downloadUrl, archive, $"msphpsql-{driverVersion}.zip", progress);
+
+            progress?.Report($"Extracting msphpsql-{driverVersion}.zip...");
+            LogWindow.LogExtract(extractPath);
             ZipFile.ExtractToDirectory(archive, extractPath, overwriteFiles: true);
 
-            var driverDir = Path.Combine(extractPath, "Windows");
-            var pdoDll = Path.Combine(driverDir, $"php_pdo_sqlsrv_{majorMinor}_{threadSafety}_{architecture}.dll");
-            var sqlDll = Path.Combine(driverDir, $"php_sqlsrv_{majorMinor}_{threadSafety}_{architecture}.dll");
-
-            if (!File.Exists(pdoDll) || !File.Exists(sqlDll))
+            progress?.Report("Installing as php_pdo_sqlsrv.dll / php_sqlsrv.dll...");
+            try
+            {
+                InstallExtensionDll(extractPath, extDir, "pdo_sqlsrv");
+                InstallExtensionDll(extractPath, extDir, "sqlsrv");
+            }
+            catch (FileNotFoundException ex)
+            {
                 throw new FileNotFoundException(
-                    $"SQL Server drivers unavailable for PHP {majorMinor} {threadSafety} {architecture} in release {driverVersion}.");
-
-            File.Copy(pdoDll, Path.Combine(extDir, "php_pdo_sqlsrv.dll"), overwrite: true);
-            File.Copy(sqlDll, Path.Combine(extDir, "php_sqlsrv.dll"), overwrite: true);
+                    $"SQL Server drivers unavailable for PHP {majorMinor} {threadSafety.ToUpperInvariant()} {architecture} in release {driverVersion}. {ex.Message}", ex);
+            }
 
             progress?.Report("Enabling in php.ini...");
             EnableExtension(phpIni, "pdo_sqlsrv");
@@ -759,15 +1156,12 @@ public static class PhpService
 
         try
         {
-            progress?.Report($"Downloading FrankenPHP from {url}...");
+            progress?.Report("Downloading FrankenPHP...");
             LogWindow.LogDownload(url);
-            var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
-            response.EnsureSuccessStatusCode();
-            await using (var stream = await response.Content.ReadAsStreamAsync())
-            await using (var fs = File.Create(archive))
-                await stream.CopyToAsync(fs);
 
-            progress?.Report("Extracting...");
+            await DownloadToFileAsync(url, archive, "frankenphp.zip", progress);
+
+            progress?.Report("Extracting frankenphp.zip...");
             LogWindow.LogExtract(FrankenPhpPath);
             ZipFile.ExtractToDirectory(archive, FrankenPhpPath, overwriteFiles: true);
             progress?.Report("FrankenPHP installed.");
@@ -1021,13 +1415,10 @@ public static class PhpService
         {
             progress?.Report("Downloading servy-cli...");
             LogWindow.LogDownload(url);
-            var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
-            response.EnsureSuccessStatusCode();
-            await using (var stream = await response.Content.ReadAsStreamAsync())
-            await using (var fs = File.Create(archive))
-                await stream.CopyToAsync(fs);
 
-            progress?.Report("Extracting servy-cli...");
+            await DownloadToFileAsync(url, archive, "servy-cli.zip", progress);
+
+            progress?.Report("Extracting servy-cli.zip...");
             LogWindow.LogExtract(servyDir);
             ZipFile.ExtractToDirectory(archive, extractPath, overwriteFiles: true);
 
@@ -1145,28 +1536,23 @@ public static class PhpService
 
         try
         {
-            progress?.Report($"Downloading {label} from {downloadUrl}...");
+            progress?.Report($"Downloading {label}...");
             LogWindow.LogDownload(downloadUrl);
-            var response = await Http.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
-            response.EnsureSuccessStatusCode();
-            await using (var stream = await response.Content.ReadAsStreamAsync())
-            await using (var fs = File.Create(archive))
-                await stream.CopyToAsync(fs);
 
-            progress?.Report("Extracting...");
+            await DownloadToFileAsync(downloadUrl, archive, $"{packageName}.zip", progress);
+
+            progress?.Report($"Extracting {packageName}.zip...");
             LogWindow.LogExtract(extractPath);
             ZipFile.ExtractToDirectory(archive, extractPath, overwriteFiles: true);
 
-            var mainDll = Path.Combine(extractPath, $"php_{extensionName}.dll");
-            if (!File.Exists(mainDll))
-                throw new FileNotFoundException($"php_{extensionName}.dll not found in downloaded package.");
-
-            File.Copy(mainDll, Path.Combine(extDir, $"php_{extensionName}.dll"), overwrite: true);
+            progress?.Report($"Installing as php_{extensionName}.dll...");
+            InstallExtensionDll(extractPath, extDir, extensionName);
 
             foreach (var dll in Directory.GetFiles(extractPath, "*.dll", SearchOption.AllDirectories))
             {
-                if (Path.GetFileName(dll) != $"php_{extensionName}.dll")
-                    File.Copy(dll, Path.Combine(installDir, Path.GetFileName(dll)), overwrite: true);
+                var fileName = Path.GetFileName(dll);
+                if (!fileName.StartsWith($"php_{extensionName}", StringComparison.OrdinalIgnoreCase) && fileName != $"php_{extensionName}.dll")
+                    File.Copy(dll, Path.Combine(installDir, fileName), overwrite: true);
             }
 
             progress?.Report("Enabling in php.ini...");
