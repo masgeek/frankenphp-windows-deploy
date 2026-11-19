@@ -17,7 +17,10 @@ param(
     [Parameter(Mandatory)][string]$Version,
     [Parameter(Mandatory)][string]$Repo,
     [Parameter(Mandatory)][string]$OutFile,
-    [string]$Zip
+    [string]$Zip,
+    # Optional: also write the user-facing changes as a prompt for the highlights AI step
+    # (only written when there is at least one user-facing change).
+    [string]$ContextFile
 )
 
 $ErrorActionPreference = 'Stop'
@@ -129,6 +132,19 @@ foreach ($key in $sections.Keys) {
 if (-not $any) {
     $out.Add('')
     $out.Add('Maintenance and internal improvements only - no user-facing changes in this release.')
+}
+
+if ($ContextFile -and $any) {
+    $ctx = [System.Collections.Generic.List[string]]::new()
+    $ctx.Add("Write the release highlights for version $Version of PHP Manager from these user-facing changes:")
+    $ctx.Add('')
+    foreach ($key in $sections.Keys) {
+        foreach ($line in $userFacing[$key]) {
+            $text = ($line -replace '^- ', '') -replace '\s*\(\[#\d+\]\([^)]*\)\)\s*$', ''
+            $ctx.Add(('[{0}] {1}' -f $key, $text))
+        }
+    }
+    [System.IO.File]::WriteAllText($ContextFile, (($ctx -join "`n") + "`n"), [System.Text.UTF8Encoding]::new($false))
 }
 
 if ($Zip) {
