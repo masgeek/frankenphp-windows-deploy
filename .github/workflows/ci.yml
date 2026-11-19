@@ -35,7 +35,7 @@ jobs:
       # unrelated feature branches.
       - name: Restore cached build output
         id: build-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: publish
           key: publish-${{ runner.os }}-${{ steps.dotnet.outputs.dotnet-version }}-${{ hashFiles('PhpManager/**', '!PhpManager/bin/**', '!PhpManager/obj/**') }}
@@ -43,7 +43,7 @@ jobs:
       # Only needed on a build-cache miss; speeds up restore when only source changed.
       - name: Cache NuGet packages
         if: steps.build-cache.outputs.cache-hit != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('PhpManager/**/*.csproj') }}
