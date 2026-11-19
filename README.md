@@ -57,11 +57,11 @@ Output: `publish/php-manager.exe`
 
 ## Creating a Release
 
-Releases are automatic. When CI succeeds on `develop`, the **Create next release** workflow opens a PR into `main` as munywele-bot. Merging it pushes to `main`; when CI succeeds there and `PhpManager/` changed since the last tag, the **BumpVersion** workflow tags the next version (via `masgeek/github-tag-action`, using the munywele-bot GitHub App token). The release it creates triggers the **Publish Release** workflow, which builds `php-manager-<version>-win-x64.zip`, attests its provenance and attaches it to the release.
+Releases are automatic. When CI succeeds on `develop`, the **Create next release** workflow opens a PR into `main` as munywele-bot. Merging it pushes to `main`; when CI succeeds there and `PhpManager/` changed since the last tag, the **BumpVersion** workflow tags the next version (via `masgeek/github-tag-action`) and creates a **draft** release as munywele-bot, then dispatches **Publish Release**. That workflow builds `php-manager-<version>-win-x64.zip`, attests its provenance, attaches it to the draft and only then publishes the release. Releases stay drafts until the asset is uploaded because GitHub release immutability locks assets once a release is published.
 
-The workflows need the repo variable `APP_CLIENT_ID` and secret `APP_PRIVATE_KEY` for the munywele-bot GitHub App (installed on this repo with Contents and Pull requests: read/write). The App token, not `GITHUB_TOKEN`, is what lets the new release trigger Publish Release.
+The workflows need the repo variable `APP_CLIENT_ID` and secret `APP_PRIVATE_KEY` for the munywele-bot GitHub App (installed on this repo with Contents, Pull requests and Actions read/write).
 
-To release a specific version manually, run the **Publish Release** workflow from the Actions tab and enter a version (e.g. `1.2.3`).
+To release manually, run the **Publish Release** workflow from the Actions tab with an existing tag (e.g. `1.2.3`). It builds that tag, attaches the zip to its draft release (creating one if needed) and publishes it. It refuses to touch a release that is already published.
 
 ## Requirements
 
