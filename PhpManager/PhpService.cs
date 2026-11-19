@@ -1607,31 +1607,36 @@ public static class PhpService
     {
         var servyDir = Path.Combine(FrankenPhpPath, "servy");
         Directory.CreateDirectory(servyDir);
-        var servyExe = Path.Combine(servyDir, "servy-cli.exe");
-        var url = Urls.Servy.DownloadUrl;
-        var archive = Path.Combine(Path.GetTempPath(), "servy-cli.zip");
+
+        progress?.Report("Finding the latest Servy release...");
+        var url = await ResolveServyDownloadUrlAsync(Urls.Servy.DownloadUrl);
+        var extension = Path.GetExtension(new Uri(url).AbsolutePath);
+        if (string.IsNullOrEmpty(extension))
+            extension = ".zip";
+
+        var archive = Path.Combine(Path.GetTempPath(), "servy-cli" + extension);
         var extractPath = Path.Combine(Path.GetTempPath(), "servy-cli-extract");
 
         try
         {
-            progress?.Report("Downloading servy-cli...");
+            if (Directory.Exists(extractPath))
+                Directory.Delete(extractPath, recursive: true);
+            Directory.CreateDirectory(extractPath);
+
+            progress?.Report($"Downloading {Path.GetFileName(new Uri(url).AbsolutePath)}...");
             LogWindow.LogDownload(url);
+            await DownloadToFileAsync(url, archive, "servy-cli" + extension, progress);
 
-            await DownloadToFileAsync(url, archive, "servy-cli.zip", progress);
-
-            progress?.Report("Extracting servy-cli.zip...");
+            progress?.Report("Extracting...");
             LogWindow.LogExtract(servyDir);
-            ZipFile.ExtractToDirectory(archive, extractPath, overwriteFiles: true);
+            ExtractArchive(archive, extractPath);
 
-            var exe = Directory.GetFiles(extractPath, "servy-cli.exe", SearchOption.AllDirectories).FirstOrDefault();
-            if (exe == null)
-                throw new FileNotFoundException("servy-cli.exe not found in downloaded package.");
-
-            File.Copy(exe, servyExe, overwrite: true);
+            // servy-cli.exe needs the DLLs next to it, so the whole package folder is installed.
+            ServyRelease.InstallFrom(extractPath, servyDir);
 
             // Add to user PATH
             var userPath = Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.User) ?? "";
-            if (!userPath.Contains(servyDir, StringComparison.OrdinalIgnoreCase))
+            if (!PathEditor.Contains(userPath, servyDir))
             {
                 var entries = userPath.Split(';', StringSplitOptions.RemoveEmptyEntries).Prepend(servyDir).ToList();
                 Environment.SetEnvironmentVariable("Path", string.Join(";", entries), EnvironmentVariableTarget.User);
@@ -1644,6 +1649,42 @@ public static class PhpService
         {
             CleanupTemp(archive, extractPath);
         }
+    }
+
+    /// <summary>A releases-page URL is resolved to the latest matching package; a direct file link is used as is.</summary>
+    private static async Task<string> ResolveServyDownloadUrlAsync(string url)
+    {
+        if (!ServyRelease.IsReleasesPage(url))
+            return url;
+
+        var api = ServyRelease.ApiUrl(url)!;
+        var json = await Http.GetStringAsync(api);
+        using var doc = JsonDocument.Parse(json);
+        var assets = doc.RootElement.GetProperty("assets").EnumerateArray()
+            .Select(a => (Name: a.GetProperty("name").GetString() ?? "", Url: a.GetProperty("browser_download_url").GetString() ?? ""))
+            .ToList();
+
+        var picked = ServyRelease.PickAsset(assets.Select(a => a.Name))
+            ?? throw new FileNotFoundException(
+                $"No x64 portable Servy package found on {url}. Assets: {string.Join(", ", assets.Select(a => a.Name))}. " +
+                "Put a direct download link in the URLs page (Servy / Download).");
+
+        return assets.First(a => a.Name == picked).Url;
+    }
+
+    /// <summary>.zip with the built-in reader; .7z with Windows' own tar.exe (bsdtar reads 7z), so no extra tool is needed.</summary>
+    private static void ExtractArchive(string archive, string destination)
+    {
+        if (archive.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            ZipFile.ExtractToDirectory(archive, destination, overwriteFiles: true);
+            return;
+        }
+
+        var tar = Path.Combine(Environment.SystemDirectory, "tar.exe");
+        var result = ProcessRunner.Run(tar, $"-xf \"{archive}\" -C \"{destination}\"", timeoutMs: 180_000);
+        if (result.ExitCode != 0)
+            throw new InvalidOperationException($"Could not extract {Path.GetFileName(archive)}: {result.Combined.Trim()}");
     }
 
     public static void UpdateFrankenPhpSystemPath()
