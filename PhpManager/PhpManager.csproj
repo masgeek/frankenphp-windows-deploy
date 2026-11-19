@@ -17,7 +17,7 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.15" />
     <!-- CVE-2025-6965: SQLitePCLRaw <= 2.1.11 bundles SQLite < 3.50.2 (GHSA-2m69-gcr7-jv3q).
          Pinning the bundle keeps lib.e_sqlite3, core and provider on the same patched version. -->
-    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.13" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.14" />
   </ItemGroup>
 
 </Project>
