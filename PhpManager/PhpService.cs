@@ -711,37 +711,7 @@ public static class PhpService
                 availableDlls.Add(Path.GetFileNameWithoutExtension(dll).Replace("php_", ""));
         }
 
-        var iniContent = File.ReadAllText(phpIni);
-        var enabledExtensions = Regex.Matches(iniContent, @"(?m)^\s*extension\s*=\s*(?:php_)?(\w+)(?:\.dll)?\s*$")
-            .Select(m => m.Groups[1].Value)
-            .ToList();
-
-        var loaded = new List<string>();
-        var failed = new List<string>();
-        var noDll = new List<string>();
-        var reasons = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var ext in enabledExtensions)
-        {
-            if (query.Modules.Contains(ext, StringComparer.OrdinalIgnoreCase))
-            {
-                loaded.Add(ext);
-            }
-            else if (availableDlls.Contains(ext))
-            {
-                failed.Add(ext);
-                reasons[ext] = query.LoadFailures.TryGetValue(ext, out var why)
-                    ? why
-                    : query.TimedOut ? "php -m timed out" : "DLL present but PHP did not load it";
-            }
-            else
-            {
-                noDll.Add(ext);
-                reasons[ext] = $"php_{ext}.dll is not in the ext folder";
-            }
-        }
-
-        return new VerifyResult(loaded, failed, noDll, reasons, query.TimedOut);
+        return ExtensionHealth.Classify(File.ReadAllText(phpIni), availableDlls, query.Modules, query.LoadFailures, query.TimedOut);
     }
 
     /// <summary>Comments out the given extensions in php.ini so PHP stops trying to load them.</summary>
@@ -1134,6 +1104,12 @@ public static class PhpService
         var phpIni = Path.Combine(BasePath, version, "php.ini");
         if (!File.Exists(phpIni))
             throw new FileNotFoundException($"php.ini not found at {phpIni}");
+
+        // zend_extension=xdebug with no DLL makes every PHP start print "Failed loading Zend extension".
+        if (config.Enabled && !File.Exists(Path.Combine(BasePath, version, "ext", "php_xdebug.dll")))
+            throw new InvalidOperationException(
+                "php_xdebug.dll is not in this PHP's ext folder, so Xdebug cannot be enabled yet. " +
+                "Download it first (Step 3 on the Xdebug page), then apply.");
 
         var content = File.ReadAllText(phpIni);
         var lines = new List<string> { "[xdebug]" };

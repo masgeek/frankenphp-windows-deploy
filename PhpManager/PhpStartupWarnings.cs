@@ -9,6 +9,11 @@ public static class PhpStartupWarnings
         @"(?im)^(?:PHP )?Warning:\s+PHP Startup:\s+Unable to load dynamic library '(?:php_)?(?<name>\w+?)(?:\.dll)?'(?<reason>.*)$",
         RegexOptions.Compiled);
 
+    /// <summary>Failed loading Zend extension 'xdebug' (tried: ... (The specified module could not be found))</summary>
+    private static readonly Regex ZendLoadFailure = new(
+        @"(?im)^(?:PHP )?Warning:\s+Failed loading Zend extension '(?:(?i:php_))?(?<name>\w+?)(?:(?i:\.dll))?'(?<reason>.*)$",
+        RegexOptions.Compiled);
+
     /// <summary>Module "x" is already loaded: the extension is listed on more than one php.ini line.</summary>
     private static readonly Regex AlreadyLoaded = new(
         @"(?im)^(?:PHP )?Warning:\s+Module [""'](?<name>\w+)[""'] is already loaded",
@@ -36,6 +41,14 @@ public static class PhpStartupWarnings
             // "(tried: C:\PHP\ext\php_x.dll (The specified module could not be found), ...)" -> keep the OS message.
             var os = Regex.Match(reason, @"\(([^()]*(?:could not be found|not a valid|Access is denied|specified procedure)[^()]*)\)");
             result[m.Groups["name"].Value] = os.Success ? os.Groups[1].Value : reason.Trim('(', ')', ' ', '.');
+        }
+
+        foreach (Match m in ZendLoadFailure.Matches(output))
+        {
+            var reason = m.Groups["reason"].Value;
+            var os = Regex.Match(reason, @"\(([^()]*(?:could not be found|not a valid|Access is denied|specified procedure)[^()]*)\)");
+            result[m.Groups["name"].Value] =
+                (os.Success ? os.Groups[1].Value : "could not be loaded") + $"; php_{m.Groups["name"].Value}.dll is missing or built for a different PHP";
         }
 
         foreach (Match m in AlreadyLoaded.Matches(output))

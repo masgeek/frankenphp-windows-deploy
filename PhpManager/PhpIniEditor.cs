@@ -6,12 +6,15 @@ namespace PhpManager;
 /// <summary>Pure php.ini text edits (no file or process access).</summary>
 public static class PhpIniEditor
 {
-    /// <summary>Comments out active <c>extension=name</c> lines (also php_name.dll forms). Other lines are untouched.</summary>
+    /// <summary>Comments out the <c>extension=name</c> and <c>zend_extension=name</c> lines for each name. Other lines are untouched.</summary>
     public static string DisableExtensions(string iniContent, IEnumerable<string> names)
     {
         var content = iniContent;
         foreach (var name in names)
+        {
             content = SetExtensionState(content, name, enabled: false, zend: false, addIfMissing: false);
+            content = SetExtensionState(content, name, enabled: false, zend: true, addIfMissing: false);
+        }
 
         return content;
     }
