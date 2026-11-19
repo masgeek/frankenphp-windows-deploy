@@ -1,25 +1,43 @@
-name: Build and Release
+name: Publish Release
 
 on:
-  push:
-    tags:
-      - '[0-9]+.[0-9]+.[0-9]+'
+  release:
+    # Published only — "created"/"prereleased" would double-fire alongside
+    # "published" for a non-draft release and build the same version twice.
+    types: [published]
   workflow_dispatch:
     inputs:
       version:
         description: 'Version (e.g. 1.0.0)'
         required: true
 
+# Deliberately release-only, not also `push: tags` — bump-and-tag.yml creates
+# the tag and the release together on every push to main, so listening to both
+# would build and upload the same version twice (a guaranteed race).
+#
+# Releases are always created by the munywele-bot GitHub App: bump-and-tag.yml
+# creates it on every push to main, and the manual-dispatch fallback below uses
+# the same App token. Events caused by GITHUB_TOKEN don't trigger workflows, so
+# the App token is also what makes this workflow fire.
+
 permissions:
-  contents: write
+  contents: read        # release writes use the munywele-bot App token, not GITHUB_TOKEN
+  id-token: write       # required for build provenance attestation
+  attestations: write   # required for build provenance attestation
 
 jobs:
-  build:
+  publish:
     runs-on: windows-latest
-
     steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3.3.0
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -29,28 +47,27 @@ jobs:
       - name: Determine version
         id: version
         shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          if ("${{ github.ref_type }}" -eq "tag") {
-            $ver = "${{ github.ref_name }}"
-          } else {
-            $ver = "${{ github.event.inputs.version }}"
+          # The tag (created by bump-and-tag.yml from commit messages) is the
+          # source of truth for the version, not the csproj. It is injected at
+          # build time via -p:Version and never committed back to git.
+          $ver = if ($env:RELEASE_TAG) { $env:RELEASE_TAG } else { $env:INPUT_VERSION }
+          if ($ver -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Version '$ver' is not a plain semver version (expected e.g. 1.2.3)."
           }
-          if (-not $ver) { $ver = "0.0.0" }
           Write-Host "Version: $ver"
           echo "version=$ver" >> $env:GITHUB_OUTPUT
 
-      - name: Update version in csproj
-        shell: pwsh
-        run: |
-          $xml = Get-Content "PhpManager/PhpManager.csproj" -Raw
-          $xml = $xml -replace '<Version>.*?</Version>', ''
-          $xml = $xml -replace '<PackageVersion>.*?</PackageVersion>', ''
-          $xml = $xml -replace '<AssemblyVersion>.*?</AssemblyVersion>', ''
-          $xml = $xml -replace '<FileVersion>.*?</FileVersion>', ''
-          $xml = $xml.Replace('</PropertyGroup>', "    <Version>${{ steps.version.outputs.version }}</Version>`n    <AssemblyVersion>${{ steps.version.outputs.version }}.0</AssemblyVersion>`n    <FileVersion>${{ steps.version.outputs.version }}.0</FileVersion>`n  </PropertyGroup>")
-          Set-Content "PhpManager/PhpManager.csproj" $xml -NoNewline
+      - name: Restore
+        run: dotnet restore PhpManager/PhpManager.csproj
 
-      - name: Publish
+      - name: Build
+        run: dotnet build PhpManager/PhpManager.csproj -c Release --no-restore -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Publish (self-contained single file)
         run: >
           dotnet publish PhpManager/PhpManager.csproj
           -c Release
@@ -60,33 +77,65 @@ jobs:
           -p:Version=${{ steps.version.outputs.version }}
           -o publish
 
-      - name: Package
+      - name: Smoke test (exe exists and carries the release version)
         shell: pwsh
-        run: |
-          Compress-Archive -Path "publish/*" -DestinationPath "php-manager-${{ steps.version.outputs.version }}-win-x64.zip"
-          Get-Item "php-manager-${{ steps.version.outputs.version }}-win-x64.zip" | Select-Object Name, Length
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.version }}
-          name: PHP Manager ${{ steps.version.outputs.version }}
-          body: |
-            ## PHP Manager ${{ steps.version.outputs.version }}
-
-            ### Downloads
-            - **php-manager-${{ steps.version.outputs.version }}-win-x64.zip** — Self-contained, no dependencies required.
-
-            ### Features
-            - Install, switch, remove PHP versions
-            - Extension manager with verify loaded
-            - Redis and SQL Server extension installer
-            - php.ini configuration (dev/prod)
-            - CA certificate bundle setup
-            - System PATH management with admin elevation
-          files: |
-            php-manager-${{ steps.version.outputs.version }}-win-x64.zip
-          draft: false
-          prerelease: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # The app is a WPF GUI, so don't launch it — inspect the binary instead.
+          $exe = Get-Item "publish/php-manager.exe"
+          Write-Host "$($exe.Name): $($exe.Length) bytes, version $($exe.VersionInfo.ProductVersion)"
+          if (-not $exe.VersionInfo.ProductVersion.StartsWith($env:VERSION)) {
+            throw "Built version '$($exe.VersionInfo.ProductVersion)' does not match release '$env:VERSION'."
+          }
+
+      - name: Package
+        id: package
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $zip = "php-manager-$env:VERSION-win-x64.zip"
+          Compress-Archive -Path "publish/*" -DestinationPath $zip
+          Get-Item $zip | Select-Object Name, Length
+          echo "zip=$zip" >> $env:GITHUB_OUTPUT
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ steps.package.outputs.zip }}
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-zip
+          path: ${{ steps.package.outputs.zip }}
+
+      - name: Attach zip to the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          ZIP: ${{ steps.package.outputs.zip }}
+        run: |
+          # Manual dispatch may run before any release exists for the version.
+          gh release view $env:VERSION *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:VERSION --title "PHP Manager $env:VERSION" --generate-notes --target $env:GITHUB_SHA
+            if ($LASTEXITCODE -ne 0) { throw "Failed to create release $env:VERSION" }
+          }
+          gh release upload $env:VERSION $env:ZIP --clobber
+          if ($LASTEXITCODE -ne 0) { throw "Failed to upload $env:ZIP" }
+
+      - name: Note build status on the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          ZIP: ${{ steps.package.outputs.zip }}
+        run: |
+          # Releases have no comments (unlike issues/PRs), so append the status
+          # to the release notes instead.
+          $notes = gh release view $env:VERSION --json body -q .body
+          $status = "`n`n---`n📦 ``$env:ZIP`` built and attached by this workflow (build provenance attested)."
+          gh release edit $env:VERSION --notes "$notes$status"

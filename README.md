@@ -57,12 +57,11 @@ Output: `publish/php-manager.exe`
 
 ## Creating a Release
 
-```bash
-git tag 1.0.0
-git push origin 1.0.0
-```
+Releases are automatic. When CI succeeds on `develop`, the **Create next release** workflow opens a PR into `main` as munywele-bot. Merging it pushes to `main`; when CI succeeds there and `PhpManager/` changed since the last tag, the **BumpVersion** workflow tags the next version (via `masgeek/github-tag-action`, using the munywele-bot GitHub App token). The release it creates triggers the **Publish Release** workflow, which builds `php-manager-<version>-win-x64.zip`, attests its provenance and attaches it to the release.
 
-GitHub Actions will build, package as `php-manager-1.0.0-win-x64.zip`, and create a release automatically.
+The workflows need the repo variable `APP_CLIENT_ID` and secret `APP_PRIVATE_KEY` for the munywele-bot GitHub App (installed on this repo with Contents and Pull requests: read/write). The App token, not `GITHUB_TOKEN`, is what lets the new release trigger Publish Release.
+
+To release a specific version manually, run the **Publish Release** workflow from the Actions tab and enter a version (e.g. `1.2.3`).
 
 ## Requirements
 
