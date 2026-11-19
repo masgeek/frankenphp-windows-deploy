@@ -12,6 +12,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        WindowPlacementService.Attach(this);
         _pages["Versions"] = new VersionsPage();
         _pages["Extensions"] = new ExtensionsPage();
         _pages["Redis"] = new RedisPage();
