@@ -78,7 +78,7 @@ jobs:
           name: Version ${{ steps.tag_version.outputs.new_tag }}
           draft: true
           allowUpdates: true
-          generateReleaseNotes: true
+          body: "Draft: notes are written when the release is published."
           skipIfReleaseExists: false
 
       - name: Dispatch Publish Release
