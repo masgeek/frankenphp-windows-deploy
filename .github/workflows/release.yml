@@ -19,7 +19,6 @@ permissions:
   contents: read        # release writes use the munywele-bot App token, not GITHUB_TOKEN
   id-token: write       # required for build provenance attestation
   attestations: write   # required for build provenance attestation
-  models: read          # GitHub Models inference for the release highlights (GITHUB_TOKEN)
 
 concurrency:
   group: publish-release-${{ github.event.inputs.version }}
@@ -143,48 +142,9 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           # Notes are written for users (What's new, from each PR's "Release note" section),
-          # with maintenance PRs collapsed and a Download block. Also writes
-          # release-context.txt (the user-facing changes) when there is anything to summarize.
-          ./.github/scripts/release-notes.ps1 -Version $env:VERSION -Repo $env:REPO -Zip $env:ZIP -OutFile release-notes.md -ContextFile release-context.txt
+          # with maintenance PRs collapsed and a Download block.
+          ./.github/scripts/release-notes.ps1 -Version $env:VERSION -Repo $env:REPO -Zip $env:ZIP -OutFile release-notes.md
           if ($LASTEXITCODE -ne 0) { throw "Failed to build release notes" }
-
-      # Optional AI-written highlights paragraph via GitHub Models (GITHUB_TOKEN, no API key).
-      # Pinned to v2.1.1: v3+ only supports the Copilot CLI provider. Advisory only: if the
-      # call fails or is rate limited the release continues with the deterministic notes.
-      - name: Draft highlights (GitHub Models)
-        id: highlights
-        if: hashFiles('release-context.txt') != ''
-        continue-on-error: true
-        uses: actions/ai-inference@a7805884c80886efc241e94a5351df715968a0ad # v2.1.1
-        with:
-          prompt-file: release-context.txt
-          model: openai/gpt-4o
-          max-tokens: 300
-          system-prompt: >
-            You write release highlights for PHP Manager, a Windows desktop app for managing
-            PHP versions, extensions and FrankenPHP. Reply with a single plain-language paragraph
-            of at most three sentences for end users. Only describe the changes provided; do not
-            invent features, versions or dates. No headings, lists, links or markdown formatting.
-
-      - name: Add highlights to notes
-        if: steps.highlights.outcome == 'success' && steps.highlights.outputs.response-file != ''
-        shell: pwsh
-        env:
-          RESPONSE_FILE: ${{ steps.highlights.outputs.response-file }}
-        run: |
-          $resp = (Get-Content $env:RESPONSE_FILE -Raw -Encoding utf8).Trim()
-          $resp = ($resp -replace '<[^>]+>', '').Trim()
-          # Sanity checks: keep it short, a single plain paragraph, nothing suspicious.
-          if (-not $resp -or $resp.Length -gt 700 -or $resp -match '(?m)^\s*(#|[-*]\s)' -or $resp -match "`n\s*`n") {
-            Write-Host "Highlights rejected by sanity checks; keeping deterministic notes."
-            exit 0
-          }
-          $notes = Get-Content release-notes.md -Raw -Encoding utf8
-          $heading = "## What's new`n"
-          if (-not $notes.Contains($heading)) { exit 0 }
-          $notes = $notes.Replace($heading, "$heading`n$resp`n")
-          [System.IO.File]::WriteAllText("$PWD/release-notes.md", $notes, [System.Text.UTF8Encoding]::new($false))
-          Write-Host "Added AI highlights to the release notes."
 
       - name: Publish the release
         shell: pwsh

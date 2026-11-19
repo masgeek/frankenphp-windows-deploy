@@ -17,10 +17,7 @@ param(
     [Parameter(Mandatory)][string]$Version,
     [Parameter(Mandatory)][string]$Repo,
     [Parameter(Mandatory)][string]$OutFile,
-    [string]$Zip,
-    # Optional: also write the user-facing changes as a prompt for the highlights AI step
-    # (only written when there is at least one user-facing change).
-    [string]$ContextFile
+    [string]$Zip
 )
 
 $ErrorActionPreference = 'Stop'
@@ -101,9 +98,10 @@ foreach ($n in $numbers) {
     }
     if ($category -eq 'maintenance') { $category = 'other' }  # author wrote a note: show it
 
-    $lines = if ($note) {
-        @($note -split '\r?\n' | ForEach-Object { ($_ -replace '^\s*[-*]\s*', '').Trim() } | Where-Object { $_ })
-    } else { @(Get-CleanTitle $pr.title) }
+    # Wrap in @() so a single entry stays an array (a lone string would be indexed per character).
+    $lines = @(if ($note) {
+        $note -split '\r?\n' | ForEach-Object { ($_ -replace '^\s*[-*]\s*', '').Trim() } | Where-Object { $_ }
+    } else { Get-CleanTitle $pr.title })
     for ($i = 0; $i -lt $lines.Count; $i++) {
         $suffix = if ($i -eq $lines.Count - 1) { " $link" } else { '' }
         $userFacing[$category] += ('- {0}{1}' -f $lines[$i], $suffix)
@@ -132,19 +130,6 @@ foreach ($key in $sections.Keys) {
 if (-not $any) {
     $out.Add('')
     $out.Add('Maintenance and internal improvements only - no user-facing changes in this release.')
-}
-
-if ($ContextFile -and $any) {
-    $ctx = [System.Collections.Generic.List[string]]::new()
-    $ctx.Add("Write the release highlights for version $Version of PHP Manager from these user-facing changes:")
-    $ctx.Add('')
-    foreach ($key in $sections.Keys) {
-        foreach ($line in $userFacing[$key]) {
-            $text = ($line -replace '^- ', '') -replace '\s*\(\[#\d+\]\([^)]*\)\)\s*$', ''
-            $ctx.Add(('[{0}] {1}' -f $key, $text))
-        }
-    }
-    [System.IO.File]::WriteAllText($ContextFile, (($ctx -join "`n") + "`n"), [System.Text.UTF8Encoding]::new($false))
 }
 
 if ($Zip) {
