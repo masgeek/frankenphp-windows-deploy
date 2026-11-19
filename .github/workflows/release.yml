@@ -55,6 +55,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: refs/tags/${{ steps.version.outputs.version }}
+          fetch-depth: 0   # release-notes.ps1 needs history and tags
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -122,7 +123,7 @@ jobs:
           # as a draft so it stays editable until the asset is attached.
           gh release view $env:VERSION *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $env:VERSION --draft --title "PHP Manager $env:VERSION" --generate-notes --verify-tag
+            gh release create $env:VERSION --draft --title "PHP Manager $env:VERSION" --notes "Draft: notes are written when the release is published." --verify-tag
             if ($LASTEXITCODE -ne 0) { throw "Failed to create draft release $env:VERSION" }
           }
           $isDraft = gh release view $env:VERSION --json isDraft -q .isDraft
@@ -132,7 +133,7 @@ jobs:
           gh release upload $env:VERSION $env:ZIP --clobber
           if ($LASTEXITCODE -ne 0) { throw "Failed to upload $env:ZIP" }
 
-      - name: Publish the release
+      - name: Build release notes
         shell: pwsh
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -140,26 +141,17 @@ jobs:
           ZIP: ${{ steps.package.outputs.zip }}
           REPO: ${{ github.repository }}
         run: |
+          # Notes are written for users (What's new, from each PR's "Release note" section),
+          # with maintenance PRs collapsed and a Download block.
+          ./.github/scripts/release-notes.ps1 -Version $env:VERSION -Repo $env:REPO -Zip $env:ZIP -OutFile release-notes.md
+          if ($LASTEXITCODE -ne 0) { throw "Failed to build release notes" }
+
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
           # Publishing is the last step: once published, the release is immutable.
-          # Releases have no comments (unlike issues/PRs), so the download details
-          # go into the notes, before publishing.
-          $notes = gh release view $env:VERSION --json body -q .body
-          if ($notes -notmatch 'SHA-256:') {
-            $sha = (Get-FileHash $env:ZIP -Algorithm SHA256).Hash.ToLower()
-            $footer = @(
-              '',
-              '---',
-              '### Download',
-              ('**{0}** - Windows 10/11 x64, self-contained (no .NET runtime required).' -f $env:ZIP),
-              '',
-              ('SHA-256: `{0}`' -f $sha),
-              '',
-              'Verify the build provenance:',
-              '```',
-              ('gh attestation verify {0} --repo {1}' -f $env:ZIP, $env:REPO),
-              '```'
-            ) -join "`n"
-            $notes = "$notes`n$footer"
-          }
-          gh release edit $env:VERSION --notes $notes --draft=false --latest
+          gh release edit $env:VERSION --notes-file release-notes.md --draft=false --latest
           if ($LASTEXITCODE -ne 0) { throw "Failed to publish release $env:VERSION" }

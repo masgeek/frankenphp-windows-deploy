@@ -61,6 +61,8 @@ Releases are automatic. When CI succeeds on `develop`, the **Create next release
 
 The workflows need the repo variable `APP_CLIENT_ID` and secret `APP_PRIVATE_KEY` for the munywele-bot GitHub App (installed on this repo with Contents, Pull requests and Actions read/write).
 
+Release notes are written for users: a **What's new** section built from each PR's `Release note` field (see the PR template), a Download block with the zip's SHA-256, and a collapsed **Maintenance** list for CI, docs and dependency changes.
+
 To release manually, run the **Publish Release** workflow from the Actions tab with an existing tag (e.g. `1.2.3`). It builds that tag, attaches the zip to its draft release (creating one if needed) and publishes it. It refuses to touch a release that is already published.
 
 ## Requirements
