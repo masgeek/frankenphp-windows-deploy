@@ -1,34 +1,49 @@
 name: Publish Release
 
+# Dispatched by bump-and-tag.yml right after it creates the tag and a DRAFT release.
+# GitHub release immutability locks a release's assets once it is published, so the
+# release stays a draft until the zip is uploaded, then this workflow publishes it.
+# Draft releases don't fire `release: published`, hence the explicit dispatch.
+#
+# Can also be run manually for an existing tag.
 on:
-  release:
-    # Published only — "created"/"prereleased" would double-fire alongside
-    # "published" for a non-draft release and build the same version twice.
-    types: [published]
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version (e.g. 1.0.0)'
+        description: 'Existing tag/version to build and publish (e.g. 1.0.0)'
         required: true
 
-# Deliberately release-only, not also `push: tags` — bump-and-tag.yml creates
-# the tag and the release together on every push to main, so listening to both
-# would build and upload the same version twice (a guaranteed race).
-#
-# Releases are always created by the munywele-bot GitHub App: bump-and-tag.yml
-# creates it on every push to main, and the manual-dispatch fallback below uses
-# the same App token. Events caused by GITHUB_TOKEN don't trigger workflows, so
-# the App token is also what makes this workflow fire.
-
+# Releases are always written by the munywele-bot GitHub App (same App token as
+# bump-and-tag.yml), so the bot owns the release, its asset and its publication.
 permissions:
   contents: read        # release writes use the munywele-bot App token, not GITHUB_TOKEN
   id-token: write       # required for build provenance attestation
   attestations: write   # required for build provenance attestation
 
+concurrency:
+  group: publish-release-${{ github.event.inputs.version }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: windows-latest
     steps:
+      - name: Validate version
+        id: version
+        shell: pwsh
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          # The tag (created by bump-and-tag.yml from commit messages) is the
+          # source of truth for the version, not the csproj. It is injected at
+          # build time via -p:Version and never committed back to git.
+          $ver = $env:INPUT_VERSION
+          if ($ver -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Version '$ver' is not a plain semver version (expected e.g. 1.2.3)."
+          }
+          Write-Host "Version: $ver"
+          echo "version=$ver" >> $env:GITHUB_OUTPUT
+
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v3.3.0
@@ -36,30 +51,15 @@ jobs:
           client-id: ${{ vars.APP_CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      - name: Checkout
+      - name: Checkout tag
         uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ steps.version.outputs.version }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-
-      - name: Determine version
-        id: version
-        shell: pwsh
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          INPUT_VERSION: ${{ github.event.inputs.version }}
-        run: |
-          # The tag (created by bump-and-tag.yml from commit messages) is the
-          # source of truth for the version, not the csproj. It is injected at
-          # build time via -p:Version and never committed back to git.
-          $ver = if ($env:RELEASE_TAG) { $env:RELEASE_TAG } else { $env:INPUT_VERSION }
-          if ($ver -notmatch '^\d+\.\d+\.\d+$') {
-            throw "Version '$ver' is not a plain semver version (expected e.g. 1.2.3)."
-          }
-          Write-Host "Version: $ver"
-          echo "version=$ver" >> $env:GITHUB_OUTPUT
 
       - name: Restore
         run: dotnet restore PhpManager/PhpManager.csproj
@@ -111,31 +111,38 @@ jobs:
           name: published-zip
           path: ${{ steps.package.outputs.zip }}
 
-      - name: Attach zip to the release
+      - name: Attach zip to the draft release
         shell: pwsh
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           VERSION: ${{ steps.version.outputs.version }}
           ZIP: ${{ steps.package.outputs.zip }}
         run: |
-          # Manual dispatch may run before any release exists for the version.
+          # A manual run may happen before any release exists for the tag; create it
+          # as a draft so it stays editable until the asset is attached.
           gh release view $env:VERSION *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $env:VERSION --title "PHP Manager $env:VERSION" --generate-notes --target $env:GITHUB_SHA
-            if ($LASTEXITCODE -ne 0) { throw "Failed to create release $env:VERSION" }
+            gh release create $env:VERSION --draft --title "PHP Manager $env:VERSION" --generate-notes --verify-tag
+            if ($LASTEXITCODE -ne 0) { throw "Failed to create draft release $env:VERSION" }
+          }
+          $isDraft = gh release view $env:VERSION --json isDraft -q .isDraft
+          if ($isDraft -ne 'true') {
+            throw "Release $env:VERSION is already published; its assets are immutable. Refusing to continue."
           }
           gh release upload $env:VERSION $env:ZIP --clobber
           if ($LASTEXITCODE -ne 0) { throw "Failed to upload $env:ZIP" }
 
-      - name: Note build status on the release
+      - name: Publish the release
         shell: pwsh
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           VERSION: ${{ steps.version.outputs.version }}
           ZIP: ${{ steps.package.outputs.zip }}
         run: |
-          # Releases have no comments (unlike issues/PRs), so append the status
-          # to the release notes instead.
+          # Publishing is the last step: once published, the release is immutable.
+          # Releases have no comments (unlike issues/PRs), so the status line goes
+          # into the notes, before publishing.
           $notes = gh release view $env:VERSION --json body -q .body
           $status = "`n`n---`n📦 ``$env:ZIP`` built and attached by this workflow (build provenance attested)."
-          gh release edit $env:VERSION --notes "$notes$status"
+          gh release edit $env:VERSION --notes "$notes$status" --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw "Failed to publish release $env:VERSION" }
