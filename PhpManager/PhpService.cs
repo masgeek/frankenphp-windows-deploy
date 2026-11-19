@@ -17,14 +17,42 @@ public class PhpVersionInfo
     public bool Installed { get; set; }
     public bool Active { get; set; }
     public bool IsFrankenPhp { get; set; }
-    public string Display => Active ? $"{Version}  (active)" : Installed ? Version : $"{Version}  (incomplete)";
+    public bool IsExternal { get; set; }
+
+    /// <summary>Real PHP version from `php -v` (null if unknown); <see cref="Version"/> is the folder name.</summary>
+    public string? DetectedVersion { get; set; }
+
+    private string Label =>
+        !string.IsNullOrEmpty(DetectedVersion) && DetectedVersion != Version
+            ? $"{Version}  [PHP {DetectedVersion}]"
+            : Version;
+
+    public string Display => IsExternal
+        ? $"{Version}  (on PATH: {InstallDir})"
+        : Active ? $"{Label}  (active)" : Installed ? Label : $"{Label}  (incomplete)";
+}
+
+public enum ExtensionKind
+{
+    /// <summary>extension=name, a DLL in the ext folder.</summary>
+    Dll,
+    /// <summary>zend_extension=name (OPcache, Xdebug).</summary>
+    Zend,
+    /// <summary>Compiled into PHP; always on and not configurable.</summary>
+    BuiltIn
 }
 
 public class ExtensionInfo
 {
     public string Name { get; set; } = "";
     public bool Enabled { get; set; }
+    public ExtensionKind Kind { get; set; } = ExtensionKind.Dll;
+    public bool IsBuiltIn => Kind == ExtensionKind.BuiltIn;
+    public string Type => Kind switch { ExtensionKind.Zend => "Zend", ExtensionKind.BuiltIn => "Built-in", _ => "DLL" };
+    public string Group => ExtensionCatalog.GroupOf(Name, Kind);
+    public int GroupOrder => ExtensionCatalog.OrderOf(Group);
     public string Status => Enabled ? "ON" : "OFF";
+    public string Laravel => LaravelExtensions.IsLaravel(Name) ? "✓" : "";
 }
 
 public static class PhpService
@@ -37,9 +65,14 @@ public static class PhpService
 
     private static readonly HttpClient Http = new(new HttpClientHandler
     {
-        AutomaticDecompression = System.Net.DecompressionMethods.All
+        AutomaticDecompression = System.Net.DecompressionMethods.All,
+        // Corporate/new machines often sit behind an authenticated proxy.
+        UseProxy = true,
+        DefaultProxyCredentials = System.Net.CredentialCache.DefaultCredentials
     })
     { Timeout = TimeSpan.FromMinutes(5) };
+
+    public static bool HasCatalogCache() => ResolveCacheFile(".php-versions.cache") != null;
 
     // --- Cache Helpers ---
 
@@ -90,7 +123,20 @@ public static class PhpService
 
     public static bool IsFrankenPhpActive() => GetActiveVersion() == "frankenphp";
 
+    /// <summary>True for PATH entries that are PhpManager's own PHP version folders (so switching can replace them).</summary>
+    private static bool IsManagedPhpEntry(string entry) =>
+        PathEditor.IsManagedPhpEntry(entry, BasePath, dir => File.Exists(Path.Combine(dir, "php.exe")));
+
+    /// <summary>Raised after the active version, or the set of installed versions, changes (may fire on any thread).</summary>
+    public static event Action? ActiveVersionChanged;
+
     public static void SetActiveVersion(string version, bool addToSystemPath = false)
+    {
+        SetActiveVersionCore(version, addToSystemPath);
+        ActiveVersionChanged?.Invoke();
+    }
+
+    private static void SetActiveVersionCore(string version, bool addToSystemPath)
     {
         if (version == "frankenphp")
         {
@@ -139,12 +185,11 @@ public static class PhpService
 
         File.WriteAllText(Path.Combine(BasePath, ".php-active-version"), version, new UTF8Encoding(false));
 
-        var versionPattern = $@"^{Regex.Escape(BasePath)}\\[\d\.]+\\?$";
 
         // User PATH
         var regUserPath = Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.User) ?? "";
         var regUserEntries = regUserPath.Split(';', StringSplitOptions.RemoveEmptyEntries)
-            .Where(e => !Regex.IsMatch(e.Trim(), versionPattern))
+            .Where(e => !IsManagedPhpEntry(e))
             .Prepend(versionDir)
             .ToList();
         Environment.SetEnvironmentVariable("Path", string.Join(";", regUserEntries), EnvironmentVariableTarget.User);
@@ -152,7 +197,7 @@ public static class PhpService
         // Process PATH
         var regProcessEntries = (Environment.GetEnvironmentVariable("Path") ?? "")
             .Split(';', StringSplitOptions.RemoveEmptyEntries)
-            .Where(e => !Regex.IsMatch(e.Trim(), versionPattern))
+            .Where(e => !IsManagedPhpEntry(e))
             .Prepend(versionDir)
             .ToList();
         Environment.SetEnvironmentVariable("Path", string.Join(";", regProcessEntries));
@@ -168,7 +213,7 @@ public static class PhpService
         {
             var machinePath = Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.Machine) ?? "";
             var machineEntries = machinePath.Split(';', StringSplitOptions.RemoveEmptyEntries)
-                .Where(e => !Regex.IsMatch(e.Trim(), versionPattern))
+                .Where(e => !IsManagedPhpEntry(e))
                 .Prepend(versionDir)
                 .ToList();
             Environment.SetEnvironmentVariable("Path", string.Join(";", machineEntries), EnvironmentVariableTarget.Machine);
@@ -177,11 +222,15 @@ public static class PhpService
 
     public static List<PhpVersionInfo> GetInstalledVersions()
     {
-        if (!Directory.Exists(BasePath))
-            return [];
-
         var activeVersion = GetActiveVersion();
         var versions = new List<PhpVersionInfo>();
+
+        var pathPhp = PhpPathDetector.Detect(BasePath);
+        if (pathPhp != null)
+            versions.Add(pathPhp);
+
+        if (!Directory.Exists(BasePath))
+            return versions;
 
         if (IsFrankenPhpInstalled())
         {
@@ -195,18 +244,39 @@ public static class PhpService
             });
         }
 
-        versions.AddRange(Directory.GetDirectories(BasePath)
-            .Select(dir => Path.GetFileName(dir))
-            .Where(name => Regex.IsMatch(name, @"^\d+\.\d+\.\d+$"))
-            .Select(name => new PhpVersionInfo
+        // Any folder holding php.exe counts, whatever it is named; a bare version-named folder
+        // without php.exe is still listed as incomplete (a failed install).
+        PurgeTrash();
+
+        var candidates = Directory.GetDirectories(BasePath)
+            .Where(dir => !Path.GetFileName(dir).Equals("frankenphp", StringComparison.OrdinalIgnoreCase))
+            .Where(dir => !Path.GetFileName(dir).StartsWith(TrashPrefix, StringComparison.Ordinal))
+            .Where(dir => File.Exists(Path.Combine(dir, "php.exe")) ||
+                          Regex.IsMatch(Path.GetFileName(dir), @"^\d+\.\d+\.\d+$"))
+            .ToList();
+
+        // Real versions come from `php -v`, cached in <BasePath>\.php-installations.
+        var detected = PhpInstallationCache.GetVersions(BasePath, candidates, PhpPathDetector.ReadVersion);
+
+        versions.AddRange(candidates.Select(dir =>
+        {
+            var name = Path.GetFileName(dir);
+            return new PhpVersionInfo
             {
                 Version = name,
-                InstallDir = Path.Combine(BasePath, name),
-                Installed = File.Exists(Path.Combine(BasePath, name, "php.exe")),
+                DetectedVersion = detected.GetValueOrDefault(dir),
+                InstallDir = dir,
+                Installed = File.Exists(Path.Combine(dir, "php.exe")),
                 Active = name == activeVersion
-            }));
+            };
+        }));
 
-        return versions.OrderByDescending(v => v.IsFrankenPhp).ThenByDescending(v => v.Version).ToList();
+        return versions
+            .OrderByDescending(v => v.IsExternal)
+            .ThenByDescending(v => v.IsFrankenPhp)
+            .ThenByDescending(v => System.Version.TryParse(v.DetectedVersion ?? v.Version, out var ver) ? ver : new System.Version(0, 0))
+            .ThenBy(v => v.Version)
+            .ToList();
     }
 
     public static List<string> GetAvailableVersions()
@@ -245,7 +315,41 @@ public static class PhpService
         return $"PHP {version} installed at {installDir}";
     }
 
-    public static async Task RemoveVersionAsync(string version)
+    /// <summary>
+    /// Removes <paramref name="dir"/> from the user and process PATH (and PHPRC if it points inside it).
+    /// Returns true when the machine PATH still lists it and needs an admin to clean it.
+    /// </summary>
+    public static bool RemoveFromPath(string dir)
+    {
+        foreach (var target in new[] { EnvironmentVariableTarget.User, EnvironmentVariableTarget.Process })
+        {
+            var current = Environment.GetEnvironmentVariable("Path", target);
+            if (PathEditor.Contains(current, dir))
+                Environment.SetEnvironmentVariable("Path", PathEditor.RemoveEntry(current, dir), target);
+
+            var phprc = Environment.GetEnvironmentVariable("PHPRC", target);
+            if (!string.IsNullOrEmpty(phprc) && phprc.StartsWith(dir.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase))
+                Environment.SetEnvironmentVariable("PHPRC", null, target);
+        }
+
+        return PathEditor.Contains(Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.Machine), dir)
+               && !TryRemoveFromMachinePath(dir);
+    }
+
+    /// <summary>Removes <paramref name="dir"/> from the machine PATH. Needs admin; false if not removed.</summary>
+    public static bool TryRemoveFromMachinePath(string dir)
+    {
+        if (!IsRunningAsAdmin())
+            return false;
+
+        var machine = Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.Machine);
+        if (PathEditor.Contains(machine, dir))
+            Environment.SetEnvironmentVariable("Path", PathEditor.RemoveEntry(machine, dir), EnvironmentVariableTarget.Machine);
+        return true;
+    }
+
+    /// <returns>True if the machine PATH still needs an admin to remove this version.</returns>
+    public static async Task<bool> RemoveVersionAsync(string version)
     {
         if (GetActiveVersion() == version)
             throw new InvalidOperationException("Cannot remove the active PHP version. Switch to another version first.");
@@ -254,14 +358,51 @@ public static class PhpService
         if (!Directory.Exists(versionDir))
             throw new DirectoryNotFoundException($"PHP {version} not found at {versionDir}");
 
-        await Task.Run(() => Directory.Delete(versionDir, recursive: true));
+        // Deleting thousands of files can take many seconds (antivirus scans each one). Renaming the folder
+        // is instant and takes it out of the list, so do that now and delete the contents in the background.
+        var trash = Path.Combine(BasePath, TrashPrefix + Guid.NewGuid().ToString("N"));
+        await Task.Run(() => Directory.Move(versionDir, trash));
+        _ = Task.Run(() => DeleteQuietly(trash));
+
+        // Don't leave PATH pointing at a folder that no longer exists.
+        var machinePending = RemoveFromPath(versionDir);
+        ActiveVersionChanged?.Invoke();
+        return machinePending;
+    }
+
+    private const string TrashPrefix = ".removing-";
+
+    private static void DeleteQuietly(string dir)
+    {
+        try
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+        catch
+        {
+            // locked or read-only files: retried by PurgeTrash on the next refresh
+        }
+    }
+
+    /// <summary>Finishes deletions that were interrupted (e.g. the app closed mid-delete).</summary>
+    private static void PurgeTrash()
+    {
+        try
+        {
+            foreach (var dir in Directory.GetDirectories(BasePath, TrashPrefix + "*"))
+                _ = Task.Run(() => DeleteQuietly(dir));
+        }
+        catch
+        {
+            // best effort
+        }
     }
 
     private static async Task DownloadAndExtractAsync(string version, string targetDir, IProgress<string>? progress)
     {
         var archive = Path.Combine(Path.GetTempPath(), $"php-{version}-nts-x64.zip");
 
-        foreach (var urlTemplate in DownloadUrls)
+        foreach (var urlTemplate in DownloadUrls.SelectMany(Urls.PhpDownload.ExpandCompilers))
         {
             var url = string.Format(urlTemplate, version);
             try
@@ -302,8 +443,8 @@ public static class PhpService
             {
                 progress?.Report($"Reading {indexUrl}...");
                 var html = await Http.GetStringAsync(indexUrl);
-                foreach (Match m in Regex.Matches(html, Urls.PhpCatalog.RegexPattern, RegexOptions.IgnoreCase))
-                    allVersions.Add(m.Groups[1].Value);
+                foreach (var v in Urls.PhpCatalog.ParseVersions(html, Urls.PhpCatalog.RegexPattern))
+                    allVersions.Add(v);
             }
             catch (Exception ex)
             {
@@ -325,6 +466,30 @@ public static class PhpService
 
     // --- php.ini Management ---
 
+    /// <summary>Creates php.ini for <paramref name="version"/> from its development or production template.</summary>
+    public static string ApplyIniProfile(string version, IniProfile profile)
+    {
+        var installDir = version == "frankenphp" ? FrankenPhpPath : Path.Combine(BasePath, version);
+        var source = PhpIniTemplates.Resolve(installDir, AppContext.BaseDirectory, profile)
+            ?? throw new FileNotFoundException(
+                $"{PhpIniTemplates.FileName(profile)} not found in {installDir}.");
+
+        var phpIni = Path.Combine(installDir, "php.ini");
+        PhpIniBackup.Backup(phpIni); // one backup of the file being replaced; the steps below are not backed up separately
+        File.Copy(source, phpIni, overwrite: true);
+        PatchExtensionDir(phpIni, installDir, backup: false);
+
+        // Turn on the extensions Laravel needs, but only those whose DLL actually ships with this PHP.
+        var extDir = Path.Combine(installDir, "ext");
+        var available = LaravelExtensions.Names
+            .Where(n => File.Exists(Path.Combine(extDir, $"php_{n}.dll")))
+            .ToList();
+        File.WriteAllText(phpIni,
+            LaravelExtensions.Enable(File.ReadAllText(phpIni), available), new UTF8Encoding(false));
+
+        return $"Applied {PhpIniTemplates.FileName(profile)} with {available.Count} Laravel extensions enabled.";
+    }
+
     public static void ConfigurePhpIni(string version, string source)
     {
         var phpIni = Path.Combine(BasePath, version, "php.ini");
@@ -332,11 +497,12 @@ public static class PhpService
         if (!File.Exists(source))
             throw new FileNotFoundException($"Source php.ini not found: {source}");
 
+        PhpIniBackup.Backup(phpIni);
         File.Copy(source, phpIni, overwrite: true);
-        PatchExtensionDir(phpIni, Path.Combine(BasePath, version));
+        PatchExtensionDir(phpIni, Path.Combine(BasePath, version), backup: false);
     }
 
-    public static void PatchExtensionDir(string phpIniPath, string installDir)
+    public static void PatchExtensionDir(string phpIniPath, string installDir, bool backup = true)
     {
         if (!File.Exists(phpIniPath))
             return;
@@ -345,7 +511,10 @@ public static class PhpService
         var extDir = Path.Combine(installDir, "ext");
         content = Regex.Replace(content, @"(?m)^\s*;?\s*extension_dir\s*=.*$",
             $"extension_dir = \"{extDir}\"");
-        File.WriteAllText(phpIniPath, content, new UTF8Encoding(false));
+        if (backup)
+            PhpIniBackup.Write(phpIniPath, content);
+        else
+            File.WriteAllText(phpIniPath, content, new UTF8Encoding(false));
     }
 
     public static List<ExtensionInfo> GetExtensions(string? version = null)
@@ -358,14 +527,15 @@ public static class PhpService
         if (!File.Exists(phpIni))
             return [];
 
-        var content = File.ReadAllText(phpIni);
-        return Regex.Matches(content, @"(?m)^\s*;?\s*extension\s*=\s*(?:php_)?(\w+)(?:\.dll)?\s*$")
-            .Select(m => new ExtensionInfo
-            {
-                Name = m.Groups[1].Value,
-                Enabled = !m.Value.TrimStart().StartsWith(";")
-            })
-            .ToList();
+        var extDir = Path.Combine(BasePath, version, "ext");
+        var dlls = Directory.Exists(extDir)
+            ? Directory.GetFiles(extDir, "php_*.dll").Select(Path.GetFileName).Select(n => n!)
+            : [];
+
+        // php -m also reveals the extensions compiled into PHP (ctype, json, ...), which have no ini line.
+        var builtIns = QueryModules(version).Modules;
+
+        return ExtensionDiscovery.Build(File.ReadAllText(phpIni), dlls, builtIns);
     }
 
     public static void SaveExtensions(string version, List<ExtensionInfo> extensions)
@@ -376,27 +546,71 @@ public static class PhpService
 
         var content = File.ReadAllText(phpIni);
 
-        foreach (var ext in extensions)
-        {
-            var pattern = $@"(?m)^\s*;?\s*extension\s*=\s*(?:php_)?{Regex.Escape(ext.Name)}(?:\.dll)?\s*$";
-            var replacement = ext.Enabled ? $"extension={ext.Name}" : $";extension={ext.Name}";
+        foreach (var ext in extensions.Where(e => !e.IsBuiltIn))
+            content = PhpIniEditor.SetExtensionState(content, ext.Name, ext.Enabled, zend: ext.Kind == ExtensionKind.Zend);
 
-            if (Regex.IsMatch(content, pattern))
-            {
-                content = Regex.Replace(content, pattern, replacement);
-            }
-            else if (ext.Enabled)
-            {
-                var nextSection = Regex.Match(content, @"(?m)^\[(?!PHP\])");
-                var directive = $"extension={ext.Name}\n";
-                content = nextSection.Success
-                    ? content.Insert(nextSection.Index, directive)
-                    : content.TrimEnd() + "\n" + directive;
-            }
-        }
-
-        File.WriteAllText(phpIni, content, new UTF8Encoding(false));
+        PhpIniBackup.Write(phpIni, content);
     }
+
+    // --- php.ini settings, OPcache and backups ---
+
+    private static string InstallDirFor(string version) =>
+        version == "frankenphp" ? FrankenPhpPath : Path.Combine(BasePath, version);
+
+    public static string IniPathFor(string version) => Path.Combine(InstallDirFor(version), "php.ini");
+
+    /// <summary>Current value of each common directive (null when not set in php.ini).</summary>
+    public static Dictionary<string, string?> ReadSettings(string version)
+    {
+        var ini = IniPathFor(version);
+        var content = File.Exists(ini) ? File.ReadAllText(ini) : "";
+        return IniSettingDefs.All.ToDictionary(s => s.Key, s => PhpIniEditor.GetDirective(content, s.Key));
+    }
+
+    public static string? ReadDirective(string version, string key)
+    {
+        var ini = IniPathFor(version);
+        return File.Exists(ini) ? PhpIniEditor.GetDirective(File.ReadAllText(ini), key) : null;
+    }
+
+    /// <summary>Writes all the given directives in one go (a single backup is taken first).</summary>
+    public static void SaveDirectives(string version, IReadOnlyDictionary<string, string> values)
+    {
+        var ini = IniPathFor(version);
+        if (!File.Exists(ini))
+            throw new FileNotFoundException($"No php.ini for PHP {version}. Apply a Development or Production profile first.");
+
+        var content = File.ReadAllText(ini);
+        foreach (var (key, value) in values)
+            content = PhpIniEditor.SetDirective(content, key, value);
+
+        PhpIniBackup.Write(ini, content);
+    }
+
+    /// <summary>Whether OPcache is loaded through an active zend_extension line.</summary>
+    public static bool IsOpcacheLoaded(string version)
+    {
+        var ini = IniPathFor(version);
+        return File.Exists(ini) &&
+               Regex.IsMatch(File.ReadAllText(ini), @"(?mi)^[ \t]*zend_extension[ \t]*=[ \t]*""?(?:[^""\r\n;]*[\\/])?(?:php_)?opcache(?:\.dll)?""?[ \t]*\r?$");
+    }
+
+    /// <summary>Loads or unloads OPcache (zend_extension=opcache) in php.ini, with a backup.</summary>
+    public static void SetOpcacheLoaded(string version, bool loaded)
+    {
+        var ini = IniPathFor(version);
+        if (!File.Exists(ini))
+            throw new FileNotFoundException($"No php.ini for PHP {version}.");
+
+        PhpIniBackup.Write(ini, PhpIniEditor.SetExtensionState(File.ReadAllText(ini), "opcache", loaded, zend: true));
+    }
+
+    public static List<PhpIniBackup.BackupInfo> ListIniBackups(string version) => PhpIniBackup.List(IniPathFor(version));
+
+    public static void BackupIniNow(string version) => PhpIniBackup.Backup(IniPathFor(version));
+
+    public static void RestoreIniBackup(string version, string backupPath) =>
+        PhpIniBackup.Restore(IniPathFor(version), backupPath);
 
     // --- CA Certificate ---
 
@@ -428,61 +642,55 @@ public static class PhpService
         content = PatchIniValue(content, "curl.cainfo", $"curl.cainfo = \"{cacertPath}\"");
         content = PatchIniValue(content, "openssl.cafile", $"openssl.cafile = \"{cacertPath}\"");
 
-        File.WriteAllText(phpIni, content, new UTF8Encoding(false));
+        PhpIniBackup.Write(phpIni, content);
         progress?.Report("CA certificate configured.");
         LogWindow.LogSuccess("CA certificate configured in php.ini.");
     }
 
     // --- PHP Execution ---
 
-    public static List<string> GetLoadedModules(string? version = null)
+    public record ModuleQuery(List<string> Modules, Dictionary<string, string> LoadFailures, bool TimedOut, string RawOutput);
+
+    /// <summary>Runs <c>php -m</c> (with a timeout) and also captures why any extension failed to load.</summary>
+    public static ModuleQuery QueryModules(string? version = null)
     {
         version ??= GetActiveVersion();
         if (string.IsNullOrEmpty(version))
-            return [];
+            return new ModuleQuery([], [], false, "");
 
-        var phpExe = Path.Combine(BasePath, version, "php.exe");
-        var phpIni = Path.Combine(BasePath, version, "php.ini");
+        var installDir = version == "frankenphp" ? FrankenPhpPath : Path.Combine(BasePath, version);
+        var phpExe = Path.Combine(installDir, "php.exe");
+        var phpIni = Path.Combine(installDir, "php.ini");
 
         if (!File.Exists(phpExe))
-            return [];
+            return new ModuleQuery([], [], false, "");
 
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = phpExe,
-                Arguments = "-m",
-                WorkingDirectory = Path.GetDirectoryName(phpExe),
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                Environment = { ["PHPRC"] = phpIni }
-            };
+        var result = ProcessRunner.Run(phpExe, "-m", installDir,
+            File.Exists(phpIni) ? new Dictionary<string, string> { ["PHPRC"] = phpIni } : null,
+            timeoutMs: 15_000);
 
-            using var process = Process.Start(psi)!;
-            var output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit();
+        var modules = result.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(l => l.Trim())
+            .Where(l => l.Length > 0 && char.IsLetter(l[0]) && !l.StartsWith("Warning", StringComparison.OrdinalIgnoreCase)
+                        && !l.StartsWith("PHP ", StringComparison.OrdinalIgnoreCase) && !l.StartsWith('['))
+            .ToList();
 
-            return output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                .Select(l => l.Trim())
-                .Where(l => l.Length > 0 && char.IsLetter(l[0]))
-                .ToList();
-        }
-        catch
-        {
-            return [];
-        }
+        return new ModuleQuery(modules, PhpStartupWarnings.ParseLoadFailures(result.Combined), result.TimedOut, result.Combined);
     }
+
+    public static List<string> GetLoadedModules(string? version = null) => QueryModules(version).Modules;
 
     // --- Extension Verification ---
 
-    public static (List<string> Loaded, List<string> Failed, List<string> NoDll) VerifyExtensions(string? version = null)
+    public record VerifyResult(
+        List<string> Loaded, List<string> Failed, List<string> NoDll,
+        Dictionary<string, string> Reasons, bool TimedOut);
+
+    public static VerifyResult VerifyExtensions(string? version = null)
     {
         version ??= GetActiveVersion();
         if (string.IsNullOrEmpty(version))
-            return ([], [], []);
+            return new VerifyResult([], [], [], [], false);
 
         var installDir = Path.Combine(BasePath, version);
         var phpIni = Path.Combine(installDir, "php.ini");
@@ -490,12 +698,10 @@ public static class PhpService
         var phpExe = Path.Combine(installDir, "php.exe");
 
         if (!File.Exists(phpExe) || !File.Exists(phpIni))
-            return ([], [], []);
+            return new VerifyResult([], [], [], [], false);
 
-        // Get loaded modules from php -m
-        var loadedModules = GetLoadedModules(version);
+        var query = QueryModules(version);
 
-        // Get available DLLs
         var availableDlls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (Directory.Exists(extDir))
         {
@@ -503,7 +709,6 @@ public static class PhpService
                 availableDlls.Add(Path.GetFileNameWithoutExtension(dll).Replace("php_", ""));
         }
 
-        // Get extensions enabled in php.ini
         var iniContent = File.ReadAllText(phpIni);
         var enabledExtensions = Regex.Matches(iniContent, @"(?m)^\s*extension\s*=\s*(?:php_)?(\w+)(?:\.dll)?\s*$")
             .Select(m => m.Groups[1].Value)
@@ -512,18 +717,39 @@ public static class PhpService
         var loaded = new List<string>();
         var failed = new List<string>();
         var noDll = new List<string>();
+        var reasons = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var ext in enabledExtensions)
         {
-            if (loadedModules.Contains(ext, StringComparer.OrdinalIgnoreCase))
+            if (query.Modules.Contains(ext, StringComparer.OrdinalIgnoreCase))
+            {
                 loaded.Add(ext);
+            }
             else if (availableDlls.Contains(ext))
+            {
                 failed.Add(ext);
+                reasons[ext] = query.LoadFailures.TryGetValue(ext, out var why)
+                    ? why
+                    : query.TimedOut ? "php -m timed out" : "DLL present but PHP did not load it";
+            }
             else
+            {
                 noDll.Add(ext);
+                reasons[ext] = $"php_{ext}.dll is not in the ext folder";
+            }
         }
 
-        return (loaded, failed, noDll);
+        return new VerifyResult(loaded, failed, noDll, reasons, query.TimedOut);
+    }
+
+    /// <summary>Comments out the given extensions in php.ini so PHP stops trying to load them.</summary>
+    public static void DisableExtensions(string version, IEnumerable<string> names)
+    {
+        var phpIni = Path.Combine(BasePath, version, "php.ini");
+        if (!File.Exists(phpIni))
+            return;
+
+        PhpIniBackup.Write(phpIni, PhpIniEditor.DisableExtensions(File.ReadAllText(phpIni), names));
     }
 
     public static string GetPhpVersionString(string? version = null)
@@ -536,26 +762,9 @@ public static class PhpService
         if (!File.Exists(phpExe))
             return "";
 
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = phpExe,
-                Arguments = "--version",
-                WorkingDirectory = Path.GetDirectoryName(phpExe),
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using var process = Process.Start(psi)!;
-            var output = process.StandardOutput.ReadLine() ?? "";
-            process.WaitForExit();
-            return output.Trim();
-        }
-        catch
-        {
-            return "";
-        }
+        var result = ProcessRunner.Run(phpExe, "--version", timeoutMs: 10_000);
+        var line = result.Output.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.StartsWith("PHP ", StringComparison.Ordinal));
+        return line ?? "";
     }
 
     // --- PHP Build Info (for extension downloads) ---
@@ -570,12 +779,17 @@ public static class PhpService
         if (exitCode != 0)
             throw new Exception("Unable to determine PHP version.");
 
-        var versionMatch = Regex.Match(output, @"^PHP (\d+)\.(\d+)\.");
-        if (!versionMatch.Success)
-            throw new Exception("Unable to parse PHP version.");
+        var parsed = PhpVersionParser.Parse(output);
+        if (parsed == null)
+        {
+            var snippet = output.Trim();
+            if (snippet.Length > 300)
+                snippet = snippet[..300] + "...";
+            throw new Exception($"Unable to parse PHP version from `php --version` output: {(snippet.Length == 0 ? "(empty)" : snippet)}");
+        }
 
-        var major = versionMatch.Groups[1].Value;
-        var minor = versionMatch.Groups[2].Value;
+        var major = parsed.Value.Major.ToString();
+        var minor = parsed.Value.Minor.ToString();
         var majorMinor = $"{major}.{minor}";
 
         var (phpInfo, _, phpInfoExit) = RunPhp("-i", Path.Combine(BasePath, version));
@@ -966,7 +1180,7 @@ public static class PhpService
             lines.Add($"xdebug.log={config.LogFile}");
 
         content = ReplaceIniSection(content, "xdebug", string.Join("\n", lines));
-        File.WriteAllText(phpIni, content, new UTF8Encoding(false));
+        PhpIniBackup.Write(phpIni, content);
         LogWindow.LogSuccess($"Xdebug configuration applied to PHP {version}.");
     }
 
@@ -1106,6 +1320,9 @@ public static class PhpService
 
     static PhpService()
     {
+        // php.net mirrors reject requests without a User-Agent.
+        Http.DefaultRequestHeaders.UserAgent.ParseAdd("php-manager/1.0");
+
         var settings = LoadSettings();
         if (!string.IsNullOrEmpty(settings.BasePath))
             BasePath = settings.BasePath;
@@ -1494,12 +1711,9 @@ public static class PhpService
 
     public static void UpdateSystemPathElevated(string versionDir)
     {
-        var escapedBase = Regex.Escape(BasePath);
-        var versionPattern = $@"^{escapedBase}\\[\d\.]+\\?$";
-
         var machinePath = Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.Machine) ?? "";
         var entries = machinePath.Split(';', StringSplitOptions.RemoveEmptyEntries)
-            .Where(e => !Regex.IsMatch(e.Trim(), versionPattern))
+            .Where(e => !IsManagedPhpEntry(e))
             .Prepend(versionDir)
             .ToList();
         Environment.SetEnvironmentVariable("Path", string.Join(";", entries), EnvironmentVariableTarget.Machine);
@@ -1587,7 +1801,7 @@ public static class PhpService
             ? Regex.Replace(content, pattern, $"extension={extensionName}")
             : content.TrimEnd() + $"\nextension={extensionName}\n";
 
-        File.WriteAllText(phpIniPath, content, new UTF8Encoding(false));
+        PhpIniBackup.Write(phpIniPath, content);
     }
 
     private static string PatchIniValue(string content, string key, string replacement)
@@ -1632,29 +1846,7 @@ public static class PhpService
         if (!File.Exists(phpExe))
             return ("", $"php.exe not found at {phpExe}", 1);
 
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = phpExe,
-                Arguments = args,
-                WorkingDirectory = workingDir ?? Path.GetDirectoryName(phpExe),
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            using var process = Process.Start(psi)!;
-            var output = process.StandardOutput.ReadToEnd();
-            var error = process.StandardError.ReadToEnd();
-            process.WaitForExit();
-
-            return (output, error, process.ExitCode);
-        }
-        catch (Exception ex)
-        {
-            return ("", ex.Message, 1);
-        }
+        var result = ProcessRunner.Run(phpExe, args, workingDir ?? Path.GetDirectoryName(phpExe), timeoutMs: 30_000);
+        return (result.Output, result.TimedOut ? "php.exe timed out and was stopped. " + result.Error : result.Error, result.ExitCode);
     }
 }

@@ -32,6 +32,7 @@ public static class UrlDatabase
         ("FrankenPHP", "Download", "https://github.com/php/frankenphp/releases/{path}/frankenphp-windows-x86_64.zip", "FrankenPHP runtime. Token: {path}", true),
         ("Servy", "Download", "https://github.com/nicholasgasior/servy/releases/latest/download/servy-cli-windows-amd64.zip", "Servy CLI for service management", true),
         ("CA Certificate", "Download", "https://curl.se/ca/cacert.pem", "Mozilla CA certificate bundle", true),
+        ("Composer", "Download", "https://getcomposer.org/download/latest-stable/composer.phar", "Composer PHAR (latest stable)", true),
 
         ("Documentation", "Redis", "https://pecl.php.net/package/redis", "Redis extension documentation and releases", true),
         ("Documentation", "Xdebug", "https://xdebug.org/docs/", "Xdebug documentation", true),
@@ -39,6 +40,7 @@ public static class UrlDatabase
         ("Documentation", "SQL Server", "https://github.com/microsoft/msphpsql/releases", "SQL Server driver releases", true),
         ("Documentation", "Servy", "https://github.com/nicholasgasior/servy", "Servy project repository", true),
         ("Documentation", "FrankenPHP", "https://frankenphp.dev/", "FrankenPHP documentation", true),
+        ("Documentation", "Composer", "https://getcomposer.org/doc/", "Composer documentation", true),
         ("Documentation", "PHP Windows", "https://windows.php.net/downloads/releases/", "PHP for Windows releases", true)
     };
 

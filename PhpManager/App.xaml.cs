@@ -21,6 +21,21 @@ public partial class App : Application
             return;
         }
 
+        if (e.Args.Length == 2 && e.Args[0] == "--remove-system-path")
+        {
+            try
+            {
+                PhpService.TryRemoveFromMachinePath(e.Args[1]);
+                MessageBox.Show($"Removed from system PATH:\n{e.Args[1]}", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            Shutdown();
+            return;
+        }
+
         if (e.Args.Length == 1 && e.Args[0] == "--set-frankenphp-path")
         {
             try

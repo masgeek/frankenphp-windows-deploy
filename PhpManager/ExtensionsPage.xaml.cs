@@ -10,21 +10,56 @@ public partial class ExtensionsPage : UserControl
     public ExtensionsPage()
     {
         InitializeComponent();
-        ExtensionGrid.ItemsSource = _extensions;
-        Loaded += (_, _) => LoadExtensions();
+        // Grouped by function (Database, Caching, ...) and sorted within each group.
+        var view = new System.Windows.Data.ListCollectionView(_extensions);
+        view.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription(nameof(ExtensionInfo.Group)));
+        view.SortDescriptions.Add(new System.ComponentModel.SortDescription(nameof(ExtensionInfo.GroupOrder), System.ComponentModel.ListSortDirection.Ascending));
+        view.SortDescriptions.Add(new System.ComponentModel.SortDescription(nameof(ExtensionInfo.Name), System.ComponentModel.ListSortDirection.Ascending));
+        ExtensionGrid.ItemsSource = view;
+        Loaded += async (_, _) => await LoadExtensionsAsync();
     }
 
-    private void LoadExtensions()
+    private async Task LoadExtensionsAsync()
     {
+        StatusBar.SetStatus("Loading extensions...", true);
+
+        // php -m runs php.exe to discover the built-in extensions; keep that off the UI thread.
+        var list = await Task.Run(() => PhpService.GetExtensions());
+
         _extensions.Clear();
-        foreach (var ext in PhpService.GetExtensions())
+        foreach (var ext in list)
             _extensions.Add(ext);
 
         var active = PhpService.GetActiveVersion();
-        StatusBar.SetStatus($"Loaded {_extensions.Count} extensions for PHP {(string.IsNullOrEmpty(active) ? "(none)" : active)}");
+        var enabled = list.Count(x => x.Enabled);
+        StatusBar.SetStatus($"{list.Count} extensions for PHP {(string.IsNullOrEmpty(active) ? "(none)" : active)}: " +
+                            $"{enabled} enabled, {list.Count - enabled} disabled.");
     }
 
-    private void LoadExtensions_Click(object sender, System.Windows.RoutedEventArgs e) => LoadExtensions();
+    private async void LoadExtensions_Click(object sender, System.Windows.RoutedEventArgs e) => await LoadExtensionsAsync();
+
+    /// <summary>Ticks every Laravel extension in the grid so one Save enables them all.</summary>
+    private void SelectLaravel_Click(object sender, System.Windows.RoutedEventArgs e)
+    {
+        var items = _extensions.ToList();
+        var changed = 0;
+        foreach (var ext in items.Where(x => LaravelExtensions.IsLaravel(x.Name) && !x.Enabled))
+        {
+            ext.Enabled = true;
+            changed++;
+        }
+
+        // ExtensionInfo isn't observable, so re-add the rows to refresh the checkboxes.
+        _extensions.Clear();
+        foreach (var ext in items)
+            _extensions.Add(ext);
+
+        var missing = LaravelExtensions.Names
+            .Where(n => !items.Any(x => x.Name.Equals(n, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        StatusBar.SetStatus($"Selected {changed} more Laravel extension(s). Click Save Changes to apply." +
+                            (missing.Count > 0 ? $" Not in php.ini: {string.Join(", ", missing)}." : ""));
+    }
 
     private void SaveExtensions_Click(object sender, System.Windows.RoutedEventArgs e)
     {
@@ -59,13 +94,16 @@ public partial class ExtensionsPage : UserControl
         StatusBar.SetStatus("Verifying extensions...", true);
         try
         {
-            var (loaded, failed, noDll) = await Task.Run(() => PhpService.VerifyExtensions(activeVersion));
+            var result = await Task.Run(() => PhpService.VerifyExtensions(activeVersion));
+            var (loaded, failed, noDll) = (result.Loaded, result.Failed, result.NoDll);
 
             var phpVersion = await Task.Run(() => PhpService.GetPhpVersionString(activeVersion));
             var lines = new List<string>();
             if (!string.IsNullOrEmpty(phpVersion))
                 lines.Add(phpVersion);
 
+            if (result.TimedOut)
+                lines.Add("php -m timed out and was stopped");
             if (loaded.Count > 0)
                 lines.Add($"Loaded ({loaded.Count}): {string.Join(", ", loaded)}");
             if (failed.Count > 0)
@@ -77,6 +115,26 @@ public partial class ExtensionsPage : UserControl
                 lines.Add("No extensions enabled in php.ini.");
 
             StatusBar.SetStatus(string.Join(" | ", lines));
+
+            // Don't just report problems: explain each one and offer to resolve them.
+            var problems = failed.Concat(noDll).ToList();
+            if (problems.Count > 0)
+            {
+                var detail = string.Join(Environment.NewLine,
+                    problems.Select(p => $"  - {p}: {result.Reasons.GetValueOrDefault(p, "unknown reason")}"));
+                var answer = System.Windows.MessageBox.Show(
+                    $"{problems.Count} enabled extension(s) will not load:{Environment.NewLine}{Environment.NewLine}" +
+                    $"{detail}{Environment.NewLine}{Environment.NewLine}" +
+                    "Disable them in php.ini so PHP starts cleanly?",
+                    "Extension problems", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Warning);
+
+                if (answer == System.Windows.MessageBoxResult.Yes)
+                {
+                    await Task.Run(() => PhpService.DisableExtensions(activeVersion, problems));
+                    await LoadExtensionsAsync();
+                    StatusBar.SetStatus($"Disabled {problems.Count} problem extension(s): {string.Join(", ", problems)}. Run Verify again to confirm.");
+                }
+            }
         }
         catch (Exception ex)
         {
