@@ -17,6 +17,7 @@ dotnet publish PhpManager/PhpManager.csproj -c Release -r win-x64 --self-contain
 ## Release flow
 
 - `ci.yml` (workflow `CI`) restores, builds and publishes on pushes to `main`/`develop` and PRs. There are no tests.
+- `next-release.yml` (`Create next release`) runs after CI succeeds on `develop` and opens a PR into `main` (label `bot-release`, title `Release: <head commit subject>`) as the munywele-bot App. Merging that PR to `main` is what starts the release chain below.
 - `bump-and-tag.yml` (`BumpVersion`) runs after CI succeeds on `main` (push events only). If `PhpManager/` changed since the last tag it tags the next version (no prefix, e.g. `1.0.1`) and creates a release, using the munywele-bot GitHub App token (`vars.APP_CLIENT_ID`, `secrets.APP_PRIVATE_KEY`). The App token is required so the release it creates triggers `release.yml`; `GITHUB_TOKEN` pushes would not.
 - `release.yml` (`Publish Release`) triggers on `release: published` (or manual dispatch), not on tag push, so the tag+release pair created by BumpVersion builds once. It pins the version from the tag via `-p:Version`, smoke-checks the exe's version, attests provenance, and uploads `php-manager-<version>-win-x64.zip` to the release. Don't hand-edit version properties in the csproj.
 
