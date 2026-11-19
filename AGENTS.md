@@ -4,19 +4,20 @@ This file provides guidance to AI coding agents when working with code in this r
 
 ## Project
 
-PHP Manager: a WPF desktop app (.NET 10, `net10.0-windows`, Windows x64 only) for managing PHP versions, extensions (Redis, SQL Server, Xdebug), php.ini, CA certs and FrankenPHP (as a Windows service via Servy). The only project is `PhpManager/` (assembly name `php-manager`). There are no tests; the `UnitTests` workflow only restores, builds and publishes.
+PHP Manager: a WPF desktop app (.NET 10, `net10.0-windows`, Windows x64 only) for managing PHP versions, extensions (Redis, SQL Server, Xdebug), php.ini, CA certs and FrankenPHP (as a Windows service via Servy). The app is `PhpManager/` (assembly name `php-manager`); xUnit tests live in `PhpManager.Tests/` (see `InternalsVisibleTo` in the app csproj). Keep testable logic out of code-behind and `PhpService` (its static constructor touches `settings.json` and SQLite next to the exe), e.g. in `Urls.PhpCatalog`.
 
 ## Commands
 
 ```powershell
 dotnet build PhpManager/PhpManager.csproj -c Release
+dotnet test PhpManager.Tests/PhpManager.Tests.csproj -c Release
 dotnet run --project PhpManager/PhpManager.csproj
 dotnet publish PhpManager/PhpManager.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish
 ```
 
 ## Release flow
 
-- `ci.yml` (workflow `CI`) restores, builds and publishes on pushes to `main`/`develop` and PRs. There are no tests. The `publish/` output is cached by a hash of `PhpManager/**` plus the SDK version; on a hit restore/build/publish are skipped (caches are only saved on success, and GitHub scopes them per branch, so develop/main caches serve PRs into them).
+- `ci.yml` (workflow `CI`) restores, builds, runs the tests (always, even on a cache hit) and publishes on pushes to `main`/`develop` and PRs. The `publish/` output is cached by a hash of `PhpManager/**` plus the SDK version; on a hit restore/build/publish are skipped (caches are only saved on success, and GitHub scopes them per branch, so develop/main caches serve PRs into them).
 - `next-release.yml` (`Create next release`) runs after CI succeeds on `develop` and opens a PR into `main` (label `bot-release`, title `Release: <head commit subject>`) as the munywele-bot App. Merging that PR to `main` is what starts the release chain below.
 - `bump-and-tag.yml` (`BumpVersion`) runs after CI succeeds on `main` (push events only). If `PhpManager/` changed since the last tag it tags the next version (no prefix, e.g. `1.0.1`), creates a **draft** release with the munywele-bot GitHub App token (`vars.APP_CLIENT_ID`, `secrets.APP_PRIVATE_KEY`), then dispatches `release.yml` with the new version. Releases must stay drafts until the zip is attached: GitHub release immutability locks assets on publish.
 - `release.yml` (`Publish Release`) is `workflow_dispatch` only (draft releases don't fire `release: published`). It checks out the tag, builds with `-p:Version=<tag>`, smoke-checks the exe version, attests provenance, uploads `php-manager-<version>-win-x64.zip` to the draft, and as the last step publishes it (`--draft=false --latest`). All release writes use the App token. It refuses to modify an already-published release. Don't hand-edit version properties in the csproj.

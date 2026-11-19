@@ -17,24 +17,47 @@
                 <StackPanel>
                     <TextBlock Text="PHP Manager" Foreground="#2563EB" FontSize="18" FontWeight="Bold" Margin="16,0,16,20"/>
 
+                    <TextBlock Text="PHP" Style="{StaticResource NavGroupHeader}"/>
+                    <Button x:Name="DoctorButton" Content="Health Check" Style="{StaticResource NavButton}" Tag="Doctor" Click="Nav_Click"/>
                     <Button x:Name="VersionsButton" Content="Versions" Style="{StaticResource NavButton}" Tag="Versions" Click="Nav_Click"/>
+                    <Button x:Name="ProjectButton" Content="Project PHP" Style="{StaticResource NavButton}" Tag="Project" Click="Nav_Click"/>
+                    <Button x:Name="ConfigButton" Content="Configuration" Style="{StaticResource NavButton}" Tag="Config" Click="Nav_Click"/>
                     <Button x:Name="ExtensionsButton" Content="Extensions" Style="{StaticResource NavButton}" Tag="Extensions" Click="Nav_Click"/>
+                    <TextBlock Text="ADD-ONS" Style="{StaticResource NavGroupHeader}"/>
                     <Button x:Name="RedisButton" Content="Redis" Style="{StaticResource NavButton}" Tag="Redis" Click="Nav_Click"/>
                     <Button x:Name="SqlServerButton" Content="SQL Server" Style="{StaticResource NavButton}" Tag="SqlServer" Click="Nav_Click"/>
-                    <Button x:Name="FrankenPhpButton" Content="FrankenPHP" Style="{StaticResource NavButton}" Tag="FrankenPhp" Click="Nav_Click"/>
                     <Button x:Name="XdebugButton" Content="Xdebug" Style="{StaticResource NavButton}" Tag="Xdebug" Click="Nav_Click"/>
-                    <Button x:Name="ServyButton" Content="Servy" Style="{StaticResource NavButton}" Tag="Servy" Click="Nav_Click"/>
-                    <Button x:Name="UrlsButton" Content="URLs" Style="{StaticResource NavButton}" Tag="Urls" Click="Nav_Click"/>
-                    <Button x:Name="ConfigButton" Content="Configuration" Style="{StaticResource NavButton}" Tag="Config" Click="Nav_Click"/>
                     <Button x:Name="CacertButton" Content="CA Certificate" Style="{StaticResource NavButton}" Tag="Cacert" Click="Nav_Click"/>
+                    <Button x:Name="ComposerButton" Content="Composer" Style="{StaticResource NavButton}" Tag="Composer" Click="Nav_Click"/>
+                    <TextBlock Text="RUNTIME" Style="{StaticResource NavGroupHeader}"/>
+                    <Button x:Name="FrankenPhpButton" Content="FrankenPHP" Style="{StaticResource NavButton}" Tag="FrankenPhp" Click="Nav_Click"/>
+                    <Button x:Name="ServyButton" Content="Servy" Style="{StaticResource NavButton}" Tag="Servy" Click="Nav_Click"/>
+                    <TextBlock Text="APP" Style="{StaticResource NavGroupHeader}"/>
                     <Button x:Name="SettingsButton" Content="Settings" Style="{StaticResource NavButton}" Tag="Settings" Click="Nav_Click"/>
+                    <Button x:Name="UrlsButton" Content="URLs" Style="{StaticResource NavButton}" Tag="Urls" Click="Nav_Click"/>
                 </StackPanel>
             </ScrollViewer>
         </Border>
 
         <!-- Content -->
-        <Border Grid.Column="1" Background="#F3F4F6" Padding="24">
-            <Grid x:Name="ContentArea"/>
-        </Border>
+        <Grid Grid.Column="1" Background="#F3F4F6">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Active PHP strip: every PHP-level page acts on this version -->
+            <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#E5E7EB" BorderThickness="0,0,0,1" Padding="24,10">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Active PHP:" Foreground="#6B7280" FontSize="13" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="ActiveVersionText" Text="..." Foreground="#1F2937" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="ActivePathText" Foreground="#9CA3AF" FontSize="12" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="1" Padding="24">
+                <Grid x:Name="ContentArea"/>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

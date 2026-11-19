@@ -18,8 +18,8 @@ public partial class ServyPage : UserControl
 
         if (PhpService.IsServyInstalled())
         {
-            var version = GetServyVersion();
-            ServyStatus.Text = $"servy-cli is installed.\nPath: {GetServyPath()}\nVersion: {version}";
+            var version = PhpService.GetServyVersion() ?? "unknown";
+            ServyStatus.Text = $"servy-cli is installed.\nPath: {PhpService.FindServy()}\nVersion: {version}";
             InstallBtn.Visibility = Visibility.Collapsed;
             UninstallBtn.Visibility = Visibility.Visible;
         }
@@ -29,46 +29,6 @@ public partial class ServyPage : UserControl
             InstallBtn.Visibility = Visibility.Visible;
             UninstallBtn.Visibility = Visibility.Collapsed;
         }
-    }
-
-    private static string GetServyPath()
-    {
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "where",
-                Arguments = "servy-cli",
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using var process = Process.Start(psi)!;
-            var output = process.StandardOutput.ReadToEnd().Trim();
-            process.WaitForExit();
-            return string.IsNullOrEmpty(output) ? "Not found in PATH" : output.Split('\n')[0].Trim();
-        }
-        catch { return "Unknown"; }
-    }
-
-    private static string GetServyVersion()
-    {
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "servy-cli",
-                Arguments = "version",
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using var process = Process.Start(psi)!;
-            var output = process.StandardOutput.ReadLine() ?? "";
-            process.WaitForExit();
-            return string.IsNullOrEmpty(output) ? "Unknown" : output.Trim();
-        }
-        catch { return "Unknown"; }
     }
 
     private async void Install_Click(object sender, RoutedEventArgs e)

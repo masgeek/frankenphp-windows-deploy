@@ -57,6 +57,10 @@ jobs:
         if: steps.build-cache.outputs.cache-hit != 'true'
         run: dotnet build PhpManager/PhpManager.csproj -c Release --no-restore
 
+      # Always runs (even on a build-cache hit) so test-only changes are still verified.
+      - name: Test
+        run: dotnet test PhpManager.Tests/PhpManager.Tests.csproj -c Release
+
       - name: Publish
         if: steps.build-cache.outputs.cache-hit != 'true'
         run: >

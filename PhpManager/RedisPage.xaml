@@ -25,7 +25,7 @@
                         <ComboBox x:Name="VersionBox" Grid.Column="0" Text="6.3.0" IsEditable="True"
                                   Background="#FFFFFF" Foreground="#1F2937"
                                   BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
-                        <Button x:Name="RefreshVersionsBtn" Grid.Column="1" Content="Fetch versions" Background="#D1D5DB" Foreground="#374151"
+                        <Button x:Name="RefreshVersionsBtn" Grid.Column="1" Content="Fetch versions" Style="{StaticResource SecondaryButton}"
                                 BorderThickness="0" Padding="12,6" Margin="8,0,0,0" Click="RefreshVersions_Click"/>
                     </Grid>
                     <TextBlock Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,4,0,0"

@@ -10,6 +10,8 @@ public partial class StatusBar : UserControl
         InitializeComponent();
     }
 
+    public string CurrentText => StatusText.Text;
+
     public void SetStatus(string message, bool showProgress = false, double? percent = null)
     {
         Dispatcher.Invoke(() =>

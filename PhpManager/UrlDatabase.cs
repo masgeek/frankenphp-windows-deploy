@@ -30,15 +30,17 @@ public static class UrlDatabase
         ("SQL Server", "Download", "https://github.com/microsoft/msphpsql/releases/download/v{version}/Windows_{version}RTW.zip", "SQL Server drivers. Token: {version}", true),
 
         ("FrankenPHP", "Download", "https://github.com/php/frankenphp/releases/{path}/frankenphp-windows-x86_64.zip", "FrankenPHP runtime. Token: {path}", true),
-        ("Servy", "Download", "https://github.com/nicholasgasior/servy/releases/latest/download/servy-cli-windows-amd64.zip", "Servy CLI for service management", true),
+        ("Servy", "Download", "https://github.com/aelassas/servy/releases", "Servy releases page; the latest x64 portable CLI package is picked automatically (or give a direct .7z/.zip link)", true),
         ("CA Certificate", "Download", "https://curl.se/ca/cacert.pem", "Mozilla CA certificate bundle", true),
+        ("Composer", "Download", "https://getcomposer.org/download/latest-stable/composer.phar", "Composer PHAR (latest stable)", true),
 
         ("Documentation", "Redis", "https://pecl.php.net/package/redis", "Redis extension documentation and releases", true),
         ("Documentation", "Xdebug", "https://xdebug.org/docs/", "Xdebug documentation", true),
         ("Documentation", "Xdebug Wizard", "https://xdebug.org/wizard", "Official installation wizard", true),
         ("Documentation", "SQL Server", "https://github.com/microsoft/msphpsql/releases", "SQL Server driver releases", true),
-        ("Documentation", "Servy", "https://github.com/nicholasgasior/servy", "Servy project repository", true),
+        ("Documentation", "Servy", "https://github.com/aelassas/servy", "Servy project repository", true),
         ("Documentation", "FrankenPHP", "https://frankenphp.dev/", "FrankenPHP documentation", true),
+        ("Documentation", "Composer", "https://getcomposer.org/doc/", "Composer documentation", true),
         ("Documentation", "PHP Windows", "https://windows.php.net/downloads/releases/", "PHP for Windows releases", true)
     };
 
@@ -80,6 +82,7 @@ public static class UrlDatabase
     public static void EnsureDefaults()
     {
         Initialize();
+        MigrateLegacyDefaults();
 
         foreach (var row in Defaults)
         {
@@ -96,6 +99,23 @@ public static class UrlDatabase
             cmd.Parameters.AddWithValue("$url", row.Url);
             cmd.Parameters.AddWithValue("$desc", row.Description);
             cmd.Parameters.AddWithValue("$isDefault", row.IsDefault ? 1 : 0);
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>Replaces rows that still hold a URL shipped by an earlier version; edited rows are never touched.</summary>
+    private static void MigrateLegacyDefaults()
+    {
+        using var connection = new SqliteConnection(ConnectionString);
+        connection.Open();
+        foreach (var (category, key, oldUrl, newUrl) in ServyRelease.LegacyDefaults)
+        {
+            var cmd = connection.CreateCommand();
+            cmd.CommandText = "UPDATE urls SET UrlTemplate = $new WHERE Category = $cat AND Key = $key AND UrlTemplate = $old;";
+            cmd.Parameters.AddWithValue("$new", newUrl);
+            cmd.Parameters.AddWithValue("$cat", category);
+            cmd.Parameters.AddWithValue("$key", key);
+            cmd.Parameters.AddWithValue("$old", oldUrl);
             cmd.ExecuteNonQuery();
         }
     }

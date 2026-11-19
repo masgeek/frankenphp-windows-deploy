@@ -84,26 +84,49 @@
 
                         <StackPanel Grid.Column="0" Margin="0,0,8,0">
                             <TextBlock Text="Port" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
-                            <TextBox x:Name="PortBox" Text="8001" Background="#FFFFFF" Foreground="#1F2937"
-                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
+                            <ComboBox x:Name="PortBox" IsEditable="True" Text="8001" Background="#FFFFFF" Foreground="#1F2937"
+                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14">
+                                <ComboBoxItem Content="80"/>
+                                <ComboBoxItem Content="443"/>
+                                <ComboBoxItem Content="8000"/>
+                                <ComboBoxItem Content="8001"/>
+                                <ComboBoxItem Content="8080"/>
+                                <ComboBoxItem Content="8443"/>
+                            </ComboBox>
                         </StackPanel>
 
                         <StackPanel Grid.Column="1" Margin="0,0,8,0">
                             <TextBlock Text="Admin Port" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
-                            <TextBox x:Name="AdminPortBox" Text="2020" Background="#FFFFFF" Foreground="#1F2937"
-                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
+                            <ComboBox x:Name="AdminPortBox" IsEditable="True" Text="2020" Background="#FFFFFF" Foreground="#1F2937"
+                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14">
+                                <ComboBoxItem Content="2019"/>
+                                <ComboBoxItem Content="2020"/>
+                                <ComboBoxItem Content="2021"/>
+                            </ComboBox>
                         </StackPanel>
 
                         <StackPanel Grid.Column="2" Margin="0,0,8,0">
                             <TextBlock Text="Workers" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
-                            <TextBox x:Name="WorkersBox" Text="2" Background="#FFFFFF" Foreground="#1F2937"
-                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
+                            <ComboBox x:Name="WorkersBox" IsEditable="True" Text="2" Background="#FFFFFF" Foreground="#1F2937"
+                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14">
+                                <ComboBoxItem Content="1"/>
+                                <ComboBoxItem Content="2"/>
+                                <ComboBoxItem Content="4"/>
+                                <ComboBoxItem Content="8"/>
+                                <ComboBoxItem Content="16"/>
+                            </ComboBox>
                         </StackPanel>
 
                         <StackPanel Grid.Column="3">
                             <TextBlock Text="Max Requests" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
-                            <TextBox x:Name="MaxRequestsBox" Text="250" Background="#FFFFFF" Foreground="#1F2937"
-                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
+                            <ComboBox x:Name="MaxRequestsBox" IsEditable="True" Text="250" Background="#FFFFFF" Foreground="#1F2937"
+                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14">
+                                <ComboBoxItem Content="0"/>
+                                <ComboBoxItem Content="100"/>
+                                <ComboBoxItem Content="250"/>
+                                <ComboBoxItem Content="500"/>
+                                <ComboBoxItem Content="1000"/>
+                            </ComboBox>
                         </StackPanel>
                     </Grid>
 
@@ -116,8 +139,13 @@
 
                         <StackPanel Grid.Column="0" Margin="0,0,8,0">
                             <TextBlock Text="Health Path" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
-                            <TextBox x:Name="HealthPathBox" Text="/up" Background="#FFFFFF" Foreground="#1F2937"
-                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
+                            <ComboBox x:Name="HealthPathBox" IsEditable="True" Text="/up" Background="#FFFFFF" Foreground="#1F2937"
+                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14">
+                                <ComboBoxItem Content="/up"/>
+                                <ComboBoxItem Content="/health"/>
+                                <ComboBoxItem Content="/healthz"/>
+                                <ComboBoxItem Content="/ping"/>
+                            </ComboBox>
                         </StackPanel>
 
                         <StackPanel Grid.Column="1" Margin="0,0,8,0">
@@ -133,9 +161,9 @@
 
                     <WrapPanel Margin="0,12,0,0">
                         <Button x:Name="SaveBtn" Content="Save Service" Style="{StaticResource ActionButton}" Click="Save_Click"/>
-                        <Button x:Name="CancelBtn" Content="Cancel" Background="#D1D5DB" Foreground="#374151"
+                        <Button x:Name="CancelBtn" Content="Cancel" Style="{StaticResource SecondaryButton}"
                                 BorderThickness="0" Padding="16,8" Margin="8,0,0,0" Click="Cancel_Click"/>
-                        <Button x:Name="DeleteBtn" Content="Delete" Background="#DC2626" Foreground="White"
+                        <Button x:Name="DeleteBtn" Content="Delete" Style="{StaticResource DangerButton}"
                                 BorderThickness="0" Padding="16,8" Margin="8,0,0,0" Click="Delete_Click"
                                 Visibility="Collapsed"/>
                     </WrapPanel>
@@ -145,11 +173,21 @@
             <Border Style="{StaticResource CardBorder}">
                 <StackPanel>
                     <TextBlock Text="Service Control" Style="{StaticResource SubText}" Margin="0,0,0,8"/>
+                    <TextBlock x:Name="PhpUsedText" Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                    <WrapPanel Margin="0,0,0,8">
+                        <TextBlock Text="Preset:" Foreground="#374151" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <ComboBox x:Name="PresetCombo" Width="220" Margin="0,0,8,0" Padding="4" VerticalAlignment="Center"/>
+                        <Button x:Name="ApplyPresetBtn" Content="Apply to form" Style="{StaticResource SecondaryButton}" Click="ApplyPreset_Click"/>
+                    </WrapPanel>
+                    <TextBlock x:Name="PresetDescText" Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,0,0,8"/>
                     <WrapPanel>
                         <Button x:Name="StartBtn" Content="Start" Style="{StaticResource ActionButton}" Click="Start_Click"/>
-                        <Button x:Name="StopBtn" Content="Stop" Background="#DC2626" Foreground="White"
+                        <Button x:Name="RestartBtn" Content="Restart" Style="{StaticResource ActionButton}" Margin="8,0,0,0" Click="Restart_Click"/>
+                        <Button x:Name="StopBtn" Content="Stop" Style="{StaticResource DangerButton}"
                                 BorderThickness="0" Padding="16,8" Margin="8,0,0,0" Click="Stop_Click"/>
-                        <Button x:Name="RefreshBtn" Content="Refresh" Background="#D1D5DB" Foreground="#374151"
+                        <Button x:Name="LogBtn" Content="View Log" Style="{StaticResource SecondaryButton}"
+                                BorderThickness="0" Padding="16,8" Margin="8,0,0,0" Click="ViewLog_Click"/>
+                        <Button x:Name="RefreshBtn" Content="Refresh" Style="{StaticResource SecondaryButton}"
                                 BorderThickness="0" Padding="16,8" Margin="8,0,0,0" Click="Refresh_Click"/>
                     </WrapPanel>
                 </StackPanel>

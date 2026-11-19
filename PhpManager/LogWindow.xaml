@@ -16,9 +16,9 @@
             <Grid>
                 <TextBlock Text="Activity Log" FontWeight="SemiBold" FontSize="14" Foreground="#1F2937" VerticalAlignment="Center"/>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button x:Name="ClearBtn" Content="Clear" Background="#D1D5DB" Foreground="#374151"
+                    <Button x:Name="ClearBtn" Content="Clear" Style="{StaticResource SecondaryButton}"
                             BorderThickness="0" Padding="12,6" FontSize="12" Click="Clear_Click" Margin="0,0,6,0"/>
-                    <Button x:Name="CopyBtn" Content="Copy All" Background="#D1D5DB" Foreground="#374151"
+                    <Button x:Name="CopyBtn" Content="Copy All" Style="{StaticResource SecondaryButton}"
                             BorderThickness="0" Padding="12,6" FontSize="12" Click="Copy_Click"/>
                 </StackPanel>
             </Grid>
