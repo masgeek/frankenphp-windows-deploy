@@ -1,12 +1,20 @@
-name: UnitTests
+name: CI
 
 on:
   push:
+    branches: [main, develop]
   pull_request:
-    branches: [main,develop]
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  unit-test:
+  build:
     runs-on: windows-latest
 
     steps:

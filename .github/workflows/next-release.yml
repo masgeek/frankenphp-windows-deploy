@@ -1,0 +1,64 @@
+name: Create next release
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - develop
+jobs:
+  action-pull-request:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    concurrency:
+      cancel-in-progress: true
+      group: next-release-develop
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_branch }}
+
+      - name: Verify tested commit
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "${{ github.event.workflow_run.head_sha }}"
+
+      - name: Determine release title
+        id: title
+        shell: bash
+        env:
+          # Passed as an env var, never spliced into the script text itself —
+          # the commit message is attacker-controlled (anyone who can push a
+          # commit controls it), so interpolating it directly into `run:`
+          # would be a script-injection hole.
+          COMMIT_MESSAGE: ${{ github.event.workflow_run.head_commit.message }}
+        run: |
+          # Only the first line — the action's `title` input is a literal/
+          # expression, not a template, so a multi-line commit message would
+          # otherwise become a multi-line (and likely garbled) PR title.
+          SUBJECT="$(printf '%s' "$COMMIT_MESSAGE" | head -n1)"
+          echo "subject=Release: ${SUBJECT}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3.3.0
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Create pull request
+        uses: devops-infra/action-pull-request@v1.4.0
+        with:
+          github_token: ${{ steps.app-token.outputs.token }}
+          title: ${{ steps.title.outputs.subject }}
+          reviewer: ${{ github.actor }}
+          assignee: ${{ github.actor }}
+          target_branch: main
+          label: bot-release
+          old_string: "**Write you description here**"
+          body: "${{ github.event.workflow_run.head_commit.message }}"
+          new_string: "${{ github.event.workflow_run.head_commit.message }}"
+          get_diff: false
+          create_missing_labels: true
