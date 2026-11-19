@@ -48,6 +48,18 @@
                 </StackPanel>
             </Border>
 
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="Move to another machine" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
+                    <TextBlock Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,0,0,8"
+                               Text="Export your paths, download URLs, and the active PHP's php.ini settings and extension choices to one file, then import it on a new machine."/>
+                    <WrapPanel>
+                        <Button x:Name="ExportBundleBtn" Content="Export All Settings..." Style="{StaticResource ActionButton}" Margin="0,0,8,0" Click="ExportBundle_Click"/>
+                        <Button x:Name="ImportBundleBtn" Content="Import Settings..." Style="{StaticResource SecondaryButton}" Click="ImportBundle_Click"/>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
             <local:StatusBar x:Name="StatusBar"/>
         </StackPanel>
     </ScrollViewer>

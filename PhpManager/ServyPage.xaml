@@ -12,9 +12,9 @@
                     <TextBlock x:Name="ServyStatus" Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,0,0,8"/>
                     <WrapPanel>
                         <Button x:Name="InstallBtn" Content="Install Servy" Style="{StaticResource ActionButton}" Click="Install_Click"/>
-                        <Button x:Name="UninstallBtn" Content="Uninstall Servy" Background="#DC2626" Foreground="White"
+                        <Button x:Name="UninstallBtn" Content="Uninstall Servy" Style="{StaticResource DangerButton}"
                                 BorderThickness="0" Padding="16,8" Margin="8,0,0,0" Click="Uninstall_Click"/>
-                        <Button x:Name="RefreshBtn" Content="Refresh" Background="#D1D5DB" Foreground="#374151"
+                        <Button x:Name="RefreshBtn" Content="Refresh" Style="{StaticResource SecondaryButton}"
                                 BorderThickness="0" Padding="16,8" Margin="8,0,0,0" Click="Refresh_Click"/>
                     </WrapPanel>
                 </StackPanel>

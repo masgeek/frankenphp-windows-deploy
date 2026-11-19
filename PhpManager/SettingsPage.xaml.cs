@@ -72,4 +72,57 @@ public partial class SettingsPage : UserControl
             StatusBar.SetStatus($"Error: {ex.Message}");
         }
     }
+
+    private void ExportBundle_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Export all settings",
+            Filter = "PHP Manager settings (*.json)|*.json",
+            FileName = $"php-manager-settings-{DateTime.Now:yyyyMMdd}.json"
+        };
+        if (dialog.ShowDialog() != true)
+            return;
+
+        try
+        {
+            var bundle = FeatureService.CreateBundle();
+            File.WriteAllText(dialog.FileName, bundle.ToJson(), new System.Text.UTF8Encoding(false));
+            StatusBar.SetSuccess($"Exported to {dialog.FileName} ({bundle.Directives.Count} php.ini settings, " +
+                                 $"{bundle.EnabledExtensions.Count} enabled extensions).");
+        }
+        catch (Exception ex)
+        {
+            StatusBar.SetError($"Export failed: {ex.Message}");
+        }
+    }
+
+    private void ImportBundle_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Import settings",
+            Filter = "PHP Manager settings (*.json)|*.json"
+        };
+        if (dialog.ShowDialog() != true)
+            return;
+
+        try
+        {
+            var bundle = SettingsBundle.FromJson(File.ReadAllText(dialog.FileName));
+            var answer = MessageBox.Show(
+                $"Import settings exported on {bundle.ExportedAt}?{Environment.NewLine}{Environment.NewLine}" +
+                $"This replaces your paths and URLs and applies {bundle.Directives.Count} php.ini setting(s) and " +
+                $"{bundle.EnabledExtensions.Count} extension(s) to the active PHP. php.ini is backed up first.",
+                "Import settings", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (answer != MessageBoxResult.Yes)
+                return;
+
+            StatusBar.SetSuccess(FeatureService.ApplyBundle(bundle) + " Restart the app to use new paths.");
+        }
+        catch (Exception ex)
+        {
+            StatusBar.SetError($"Import failed: {ex.Message}");
+        }
+    }
 }

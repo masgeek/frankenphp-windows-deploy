@@ -23,11 +23,50 @@ public partial class MainWindow : Window
         _pages["Config"] = new ConfigPage();
         _pages["Cacert"] = new CacertPage();
         _pages["Settings"] = new SettingsPage();
+        _pages["Doctor"] = new DoctorPage();
+        _pages["Project"] = new ProjectPage();
+        _pages["Composer"] = new ComposerPage();
 
         ContentArea.Children.Clear();
         ContentArea.Children.Add(_pages["Versions"]);
 
         HighlightNav(VersionsButton);
+
+        PhpService.ActiveVersionChanged += () => Dispatcher.InvokeAsync(RefreshActiveStrip);
+        Loaded += (_, _) => RefreshActiveStrip();
+    }
+
+    /// <summary>Shows which PHP the PHP-level pages act on; the real version is read off the UI thread.</summary>
+    private async void RefreshActiveStrip()
+    {
+        try
+        {
+            var (name, dir, real) = await Task.Run(() =>
+            {
+                var active = PhpService.GetActiveVersion();
+                if (string.IsNullOrEmpty(active))
+                    return ("", "", (string?)null);
+
+                var installDir = active == "frankenphp" ? PhpService.FrankenPhpPath : System.IO.Path.Combine(PhpService.BasePath, active);
+                var version = PhpInstallationCache.GetVersion(PhpService.BasePath, installDir, PhpPathDetector.ReadVersion);
+                return (active == "frankenphp" ? "FrankenPHP" : active, installDir, version);
+            });
+
+            if (name == "")
+            {
+                ActiveVersionText.Text = "none selected";
+                ActivePathText.Text = "Install a version on the Versions page and set it active.";
+                return;
+            }
+
+            ActiveVersionText.Text = real != null && real != name ? $"{name}  (PHP {real})" : name;
+            ActivePathText.Text = dir;
+        }
+        catch
+        {
+            ActiveVersionText.Text = "unknown";
+            ActivePathText.Text = "";
+        }
     }
 
     private void Nav_Click(object sender, RoutedEventArgs e)
@@ -37,6 +76,7 @@ public partial class MainWindow : Window
             ContentArea.Children.Clear();
             ContentArea.Children.Add(page);
             HighlightNav(btn);
+            RefreshActiveStrip();
         }
     }
 

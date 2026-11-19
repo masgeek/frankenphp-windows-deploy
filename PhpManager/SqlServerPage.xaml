@@ -17,8 +17,13 @@
             <Border Style="{StaticResource CardBorder}">
                 <StackPanel>
                     <TextBlock Text="Driver Version" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
-                    <TextBox x:Name="VersionBox" Text="5.13.3" Background="#FFFFFF" Foreground="#1F2937"
-                             BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
+                    <ComboBox x:Name="VersionBox" IsEditable="True" Text="5.13.3" Background="#FFFFFF" Foreground="#1F2937"
+                             BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14">
+                        <ComboBoxItem Content="5.13.3"/>
+                        <ComboBoxItem Content="5.12.0"/>
+                        <ComboBoxItem Content="5.11.1"/>
+                        <ComboBoxItem Content="5.10.1"/>
+                    </ComboBox>
                     <TextBlock Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,4,0,0"
                                Text="Check the releases page for the latest driver version."/>
                     <WrapPanel Margin="0,12,0,0">

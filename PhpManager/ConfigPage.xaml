@@ -12,8 +12,70 @@
                     <RadioButton x:Name="KeepRadio" Content="Keep existing php.ini" Foreground="#374151" Margin="0,4" IsChecked="True"/>
                     <RadioButton x:Name="DevRadio" Content="Development (visible errors, OPcache off)" Foreground="#374151" Margin="0,4"/>
                     <RadioButton x:Name="ProdRadio" Content="Production (errors hidden, OPcache on)" Foreground="#374151" Margin="0,4"/>
+                    <TextBlock Text="The current php.ini is backed up automatically before it is replaced." Style="{StaticResource SubText}" Margin="0,8,0,0"/>
                     <WrapPanel Margin="0,12,0,0">
                         <Button x:Name="ApplyBtn" Content="Apply Configuration" Style="{StaticResource ActionButton}" Click="Apply_Click"/>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="Laravel Preset" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
+                    <TextBlock Text="One click: Laravel extensions on, OPcache loaded, and recommended memory, upload, OPcache and error settings. Creates php.ini first if there is none, and backs up before writing."
+                               Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                    <WrapPanel>
+                        <ComboBox x:Name="LaravelProfileCombo" Width="200" SelectedIndex="0" Margin="0,0,8,0" Padding="4" VerticalAlignment="Center">
+                            <ComboBoxItem Content="Local development"/>
+                            <ComboBoxItem Content="Production"/>
+                        </ComboBox>
+                        <Button x:Name="LaravelPresetBtn" Content="Apply Laravel Preset" Style="{StaticResource ActionButton}" Click="LaravelPreset_Click"/>
+                    </WrapPanel>
+                    <TextBlock x:Name="LaravelDescText" Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="Common PHP Settings" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Leave a field empty to keep PHP's default. Changes are written to php.ini (a backup is taken first); restart PHP-FPM, FrankenPHP or your web server for web requests to pick them up."
+                               Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                    <CheckBox x:Name="OpcacheLoadCheck" Content="Load OPcache (zend_extension=opcache)" Style="{StaticResource DarkCheckBox}" Margin="0,0,0,8"/>
+                    <StackPanel x:Name="SettingsPanel"/>
+                    <WrapPanel Margin="0,12,0,0">
+                        <Button x:Name="SaveSettingsBtn" Content="Save Settings" Style="{StaticResource ActionButton}" Margin="0,0,8,0" Click="SaveSettings_Click"/>
+                        <Button x:Name="ReloadSettingsBtn" Content="Reload" Style="{StaticResource SecondaryButton}" Click="Reload_Click"/>
+                    </WrapPanel>
+
+                    <Expander Header="Other directive (advanced - type a name and value)" Margin="0,16,0,0" Foreground="#374151">
+                        <StackPanel Margin="0,8,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="220"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="CustomKeyBox" Grid.Column="0" Margin="0,0,8,0" Padding="4" ToolTip="Directive name, for example session.gc_maxlifetime"/>
+                            <TextBox x:Name="CustomValueBox" Grid.Column="1" Margin="0,0,8,0" Padding="4" ToolTip="Value"/>
+                            <Button x:Name="SetCustomBtn" Grid.Column="2" Content="Set" Style="{StaticResource SecondaryButton}" Click="SetCustom_Click"/>
+                        </Grid>
+                        </StackPanel>
+                    </Expander>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="php.ini Backups" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
+                    <TextBlock Text="A backup is created automatically before every change to php.ini (the newest 25 are kept). Restoring also backs up the current file, so a rollback can itself be undone."
+                               Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                    <ListBox x:Name="BackupList" Background="#FFFFFF" Foreground="#1F2937" BorderBrush="#D1D5DB" BorderThickness="1"
+                             DisplayMemberPath="Display" Height="140"/>
+                    <WrapPanel Margin="0,8,0,0">
+                        <Button x:Name="CompareBtn" Content="Compare with Current" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Click="Compare_Click"/>
+                        <Button x:Name="RestoreBtn" Content="Restore Selected" Style="{StaticResource ActionButton}" Margin="0,0,8,0" Click="Restore_Click"/>
+                        <Button x:Name="BackupNowBtn" Content="Backup Now" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Click="BackupNow_Click"/>
+                        <Button x:Name="OpenBackupsBtn" Content="Open Folder" Style="{StaticResource SecondaryButton}" Click="OpenBackups_Click"/>
                     </WrapPanel>
                 </StackPanel>
             </Border>

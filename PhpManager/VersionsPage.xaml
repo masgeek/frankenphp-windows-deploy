@@ -12,9 +12,9 @@
                     <ListBox x:Name="InstalledList" Background="#FFFFFF" Foreground="#1F2937" BorderBrush="#D1D5DB" BorderThickness="1"
                              DisplayMemberPath="Display" Height="200"/>
                     <WrapPanel Margin="0,8,0,0">
-                        <Button x:Name="RefreshBtn" Content="Refresh" Style="{StaticResource ActionButton}" Margin="0,0,8,0" Click="Refresh_Click"/>
+                        <Button x:Name="RefreshBtn" Content="Refresh" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Click="Refresh_Click"/>
                         <Button x:Name="SetActiveBtn" Content="Set Active" Style="{StaticResource ActionButton}" Margin="0,0,8,0" Click="SetActive_Click"/>
-                        <Button x:Name="RemoveBtn" Content="Remove" Background="#DC2626" Foreground="White" BorderThickness="0" Padding="16,8" Click="Remove_Click"/>
+                        <Button x:Name="RemoveBtn" Content="Remove" Style="{StaticResource DangerButton}" BorderThickness="0" Padding="16,8" Click="Remove_Click"/>
                     </WrapPanel>
                     <CheckBox x:Name="SystemPathCheck" Content="Also add to system PATH (requires admin)" Style="{StaticResource DarkCheckBox}"/>
                 </StackPanel>
@@ -27,8 +27,27 @@
                              Height="150"/>
                     <WrapPanel Margin="0,8,0,0">
                         <Button x:Name="RefreshCatalogBtn" Content="Refresh Catalog" Style="{StaticResource ActionButton}" Margin="0,0,8,0" Click="RefreshCatalog_Click"/>
-                        <Button x:Name="InstallBtn" Content="Install Selected" Style="{StaticResource ActionButton}" Click="InstallSelected_Click"/>
+                        <Button x:Name="InstallBtn" Content="Install Selected" Style="{StaticResource ActionButton}" Margin="0,0,16,0" Click="InstallSelected_Click"/>
+                        <TextBlock Text="php.ini:" Foreground="#374151" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <ComboBox x:Name="IniProfileCombo" Width="140" SelectedIndex="0" VerticalAlignment="Center">
+                            <ComboBoxItem Content="Development"/>
+                            <ComboBoxItem Content="Production"/>
+                            <ComboBoxItem Content="None"/>
+                        </ComboBox>
                     </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <Border x:Name="UpdatesCard" Style="{StaticResource CardBorder}" Visibility="Collapsed">
+                <StackPanel>
+                    <TextBlock Text="Updates available" Style="{StaticResource SubText}" Margin="0,0,0,8"/>
+                    <ListBox x:Name="UpdatesList" Background="#FFFFFF" Foreground="#1F2937" BorderBrush="#D1D5DB" BorderThickness="1"
+                             DisplayMemberPath="Display" Height="90"/>
+                    <WrapPanel Margin="0,8,0,0">
+                        <Button x:Name="UpdateBtn" Content="Update Selected" Style="{StaticResource ActionButton}" Click="Update_Click"/>
+                    </WrapPanel>
+                    <TextBlock Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,8,0,0"
+                               Text="Installs the new patch release next to the old one, carries over php.ini and any extra extensions, and switches to it if the old one was active. The old version is kept so you can switch back."/>
                 </StackPanel>
             </Border>
 
