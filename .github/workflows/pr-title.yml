@@ -1,0 +1,80 @@
+name: PR Title
+
+# Enforces conventional-commit PR titles and applies the label that
+# .github/release.yml uses to group release notes.
+#
+# pull_request_target is used so labels can be written on every PR. This workflow
+# never checks out or runs PR code: it only reads the PR title and author.
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  title:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Validate title and label
+        uses: actions/github-script@v7
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        with:
+          script: |
+            const title = process.env.TITLE;
+            const author = process.env.AUTHOR;
+            const pr = context.payload.pull_request;
+
+            const labels = {
+              breaking:      { color: 'b60205', description: 'Breaking change' },
+              feature:       { color: '0e8a16', description: 'New feature' },
+              fix:           { color: 'd73a4a', description: 'Bug fix' },
+              performance:   { color: 'fbca04', description: 'Performance improvement' },
+              ci:            { color: '5319e7', description: 'CI, build and release tooling' },
+              documentation: { color: '0075ca', description: 'Documentation' },
+              dependencies:  { color: '0366d6', description: 'Dependency updates' },
+            };
+            const typeToLabel = {
+              feat: 'feature', fix: 'fix', perf: 'performance', ci: 'ci', build: 'ci',
+              docs: 'documentation', deps: 'dependencies',
+            };
+            const managed = Object.keys(labels);
+
+            let wanted = null;
+            const exempt = author === 'renovate[bot]' || /^Release:/i.test(title);
+
+            if (author === 'renovate[bot]') {
+              wanted = ['dependencies'];
+            } else if (!exempt) {
+              // Optional leading emoji/symbols, then type(scope)!: description
+              const m = title.match(/^[^\p{L}]*(feat|fix|perf|refactor|docs|ci|build|test|style|chore|revert|deps)(\([^)]*\))?(!)?:\s*\S/iu);
+              if (!m) {
+                core.setFailed(
+                  `PR title must look like "feat(scope): description" (a leading emoji is fine). ` +
+                  `Allowed types: feat, fix, perf, refactor, docs, ci, build, test, style, chore, revert, deps. Got: "${title}"`);
+                return;
+              }
+              wanted = [];
+              if (m[3]) wanted.push('breaking');
+              const l = typeToLabel[m[1].toLowerCase()];
+              if (l) wanted.push(l);
+            }
+
+            if (wanted === null) return; // exempt (e.g. Release: PRs, labelled elsewhere)
+
+            for (const name of wanted) {
+              try {
+                await github.rest.issues.createLabel({ ...context.repo, name, ...labels[name] });
+              } catch (e) { if (e.status !== 422) throw e; } // already exists
+            }
+
+            const current = pr.labels.map(l => l.name);
+            for (const name of current.filter(n => managed.includes(n) && !wanted.includes(n))) {
+              await github.rest.issues.removeLabel({ ...context.repo, issue_number: pr.number, name });
+            }
+            const toAdd = wanted.filter(n => !current.includes(n));
+            if (toAdd.length) {
+              await github.rest.issues.addLabels({ ...context.repo, issue_number: pr.number, labels: toAdd });
+            }

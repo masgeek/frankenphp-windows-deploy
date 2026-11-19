@@ -1,0 +1,32 @@
+# Layout for GitHub's generated release notes. Labels are applied to PRs by
+# .github/workflows/pr-title.yml from the conventional-commit title prefix.
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+      - bot-release
+  categories:
+    - title: "⚠️ Breaking Changes"
+      labels:
+        - breaking
+    - title: "✨ Features"
+      labels:
+        - feature
+    - title: "🐛 Bug Fixes"
+      labels:
+        - fix
+    - title: "⚡ Performance"
+      labels:
+        - performance
+    - title: "🔧 CI & Build"
+      labels:
+        - ci
+    - title: "📝 Documentation"
+      labels:
+        - documentation
+    - title: "📦 Dependencies"
+      labels:
+        - dependencies
+    - title: "Other Changes"
+      labels:
+        - "*"
