@@ -1452,7 +1452,7 @@ public static class PhpService
 
         var psi = new ProcessStartInfo
         {
-            FileName = "servy-cli",
+            FileName = ServyExe(),
             Arguments = servyArgs,
             WorkingDirectory = FrankenPhpPath,
             RedirectStandardOutput = true,
@@ -1483,7 +1483,7 @@ public static class PhpService
     {
         var psi = new ProcessStartInfo
         {
-            FileName = "servy-cli",
+            FileName = ServyExe(),
             Arguments = $"uninstall --name=\"{record.ServiceName}\" --quiet",
             WorkingDirectory = FrankenPhpPath,
             RedirectStandardOutput = true,
@@ -1504,7 +1504,7 @@ public static class PhpService
     {
         var psi = new ProcessStartInfo
         {
-            FileName = "servy-cli",
+            FileName = ServyExe(),
             Arguments = $"start --name=\"{record.ServiceName}\" --quiet",
             WorkingDirectory = FrankenPhpPath,
             RedirectStandardOutput = true,
@@ -1523,7 +1523,7 @@ public static class PhpService
     {
         var psi = new ProcessStartInfo
         {
-            FileName = "servy-cli",
+            FileName = ServyExe(),
             Arguments = $"stop --name=\"{record.ServiceName}\" --quiet",
             WorkingDirectory = FrankenPhpPath,
             RedirectStandardOutput = true,
@@ -1544,7 +1544,7 @@ public static class PhpService
         {
             var psi = new ProcessStartInfo
             {
-                FileName = "servy-cli",
+                FileName = ServyExe(),
                 Arguments = $"status --name=\"{serviceName}\"",
                 WorkingDirectory = FrankenPhpPath,
                 RedirectStandardOutput = true,
@@ -1560,23 +1560,43 @@ public static class PhpService
         catch { return false; }
     }
 
-    public static bool IsServyInstalled()
+    /// <summary>Full path of servy-cli.exe, or null when it is not installed.</summary>
+    public static string? FindServy() =>
+        ServyLocator.Find(
+            [Path.Combine(FrankenPhpPath, "servy")],
+            // read PATH fresh: this process's copy is a snapshot from when the app started
+            PhpPathDetector.EnumerateDirs(
+                Environment.GetEnvironmentVariable("Path"),
+                Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.Machine),
+                Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.User)),
+            ServyLocator.KnownDirs(
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)),
+            File.Exists);
+
+    /// <summary>The program to start: the located exe, or plain "servy-cli" so the error names what is missing.</summary>
+    private static string ServyExe() => FindServy() ?? "servy-cli";
+
+    public static bool IsServyInstalled() => FindServy() != null;
+
+    /// <summary>File version of the installed servy-cli.exe (does not run it), or null.</summary>
+    public static string? GetServyVersion()
     {
+        var exe = FindServy();
+        if (exe == null)
+            return null;
+
         try
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "servy-cli",
-                Arguments = "version",
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using var process = Process.Start(psi)!;
-            process.WaitForExit();
-            return process.ExitCode == 0;
+            var info = System.Diagnostics.FileVersionInfo.GetVersionInfo(exe);
+            var version = info.ProductVersion ?? info.FileVersion;
+            return string.IsNullOrWhiteSpace(version) ? null : version.Split('+')[0].Trim();
         }
-        catch { return false; }
+        catch
+        {
+            return null;
+        }
     }
 
     public static async Task InstallServyAsync(IProgress<string>? progress = null)
