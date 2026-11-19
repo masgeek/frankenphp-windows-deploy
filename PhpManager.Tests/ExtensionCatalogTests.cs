@@ -11,7 +11,7 @@ public class ExtensionCatalogTests
     [InlineData("curl", ExtensionKind.Dll, ExtensionCatalog.Web)]
     [InlineData("openssl", ExtensionKind.Dll, ExtensionCatalog.Security)]
     [InlineData("mbstring", ExtensionKind.Dll, ExtensionCatalog.Text)]
-    [InlineData("dom", ExtensionKind.BuiltIn, ExtensionCatalog.Xml)]
+    [InlineData("xsl", ExtensionKind.Dll, ExtensionCatalog.Xml)]
     [InlineData("gd", ExtensionKind.Dll, ExtensionCatalog.Files)]
     [InlineData("zip", ExtensionKind.Dll, ExtensionCatalog.Files)]
     [InlineData("gmp", ExtensionKind.Dll, ExtensionCatalog.Math)]
@@ -23,21 +23,20 @@ public class ExtensionCatalogTests
     [Fact]
     public void Lookup_IsCaseInsensitive()
     {
-        Assert.Equal(ExtensionCatalog.Database, ExtensionCatalog.GroupOf("PDO", ExtensionKind.BuiltIn));
+        Assert.Equal(ExtensionCatalog.Database, ExtensionCatalog.GroupOf("PDO", ExtensionKind.Dll));
     }
 
     [Fact]
-    public void UnknownBuiltIn_GoesToCore_UnknownDll_GoesToOther()
+    public void UnrecognisedExtension_GoesToOther()
     {
-        Assert.Equal(ExtensionCatalog.Core, ExtensionCatalog.GroupOf("standard", ExtensionKind.BuiltIn));
         Assert.Equal(ExtensionCatalog.Other, ExtensionCatalog.GroupOf("someweird", ExtensionKind.Dll));
     }
 
     [Fact]
-    public void EveryGroup_HasASortPosition_AndOtherIsAfterCore()
+    public void EveryGroup_HasASortPosition_AndOtherIsLast()
     {
         Assert.All(ExtensionCatalog.Order, g => Assert.True(ExtensionCatalog.OrderOf(g) < ExtensionCatalog.Order.Length));
-        Assert.True(ExtensionCatalog.OrderOf(ExtensionCatalog.Other) > ExtensionCatalog.OrderOf(ExtensionCatalog.Core));
+        Assert.Equal(ExtensionCatalog.Order.Length - 1, ExtensionCatalog.OrderOf(ExtensionCatalog.Other));
         Assert.Equal(ExtensionCatalog.Order.Length, ExtensionCatalog.OrderOf("not a group"));
     }
 

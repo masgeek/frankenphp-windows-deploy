@@ -3,8 +3,9 @@ using System.Text.RegularExpressions;
 namespace PhpManager;
 
 /// <summary>
-/// Builds the Extensions list: php.ini extension= and zend_extension= lines, DLLs present in the ext folder
-/// (listed disabled when they have no line), and the extensions compiled into PHP (always on, read-only).
+/// Builds the Extensions list: php.ini extension= and zend_extension= lines plus DLLs present in the ext folder
+/// (listed disabled when they have no line). Extensions compiled into PHP are deliberately not listed: they are
+/// always on and never need enabling.
 /// </summary>
 public static class ExtensionDiscovery
 {
@@ -14,19 +15,16 @@ public static class ExtensionDiscovery
     /// <summary>DLLs that are test-only and never offered.</summary>
     private static readonly HashSet<string> Hidden = new(StringComparer.OrdinalIgnoreCase) { "zend_test" };
 
-    /// <summary>Names php -m prints that are not real, separately-toggleable extensions.</summary>
-    private static readonly HashSet<string> NotListed = new(StringComparer.OrdinalIgnoreCase) { "core", "xdebug" };
-
     private const string Name = @"""?(?:[^""\r\n;]*[\\/])?(?:php_)?(?<name>\w+)(?:\.dll)?""?";
 
     /// <summary>Extensions whose desired state differs from what php.ini currently says (built-ins are never changed).</summary>
     public static List<ExtensionInfo> Changes(string iniContent, IEnumerable<ExtensionInfo> desired)
     {
         var current = Build(iniContent, []).ToDictionary(e => e.Name, e => e.Enabled, StringComparer.OrdinalIgnoreCase);
-        return desired.Where(e => !e.IsBuiltIn && current.GetValueOrDefault(e.Name) != e.Enabled).ToList();
+        return desired.Where(e => current.GetValueOrDefault(e.Name) != e.Enabled).ToList();
     }
 
-    public static List<ExtensionInfo> Build(string iniContent, IEnumerable<string> dllNames, IEnumerable<string>? builtInModules = null)
+    public static List<ExtensionInfo> Build(string iniContent, IEnumerable<string> dllNames)
     {
         var byName = new Dictionary<string, ExtensionInfo>(StringComparer.OrdinalIgnoreCase);
 
@@ -62,16 +60,6 @@ public static class ExtensionDiscovery
                 Enabled = false,
                 Kind = ZendNames.Contains(name) ? ExtensionKind.Zend : ExtensionKind.Dll
             };
-        }
-
-        // Compiled-in modules: always loaded, nothing to toggle. "Zend OPcache" etc. contain spaces and are skipped.
-        foreach (var module in builtInModules ?? [])
-        {
-            var name = module.Trim();
-            if (name.Length == 0 || name.Contains(' ') || NotListed.Contains(name) || byName.ContainsKey(name))
-                continue;
-
-            byName[name] = new ExtensionInfo { Name = name, Enabled = true, Kind = ExtensionKind.BuiltIn };
         }
 
         return byName.Values.OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase).ToList();

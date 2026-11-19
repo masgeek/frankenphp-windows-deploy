@@ -63,15 +63,13 @@ public class ExtensionDiscoveryTests
     }
 
     [Fact]
-    public void BuiltInModules_AreListedEnabledAndReadOnly()
+    public void NoDllOrIniLine_MeansNotListed_SoCoreExtensionsNeverAppear()
     {
-        var list = ExtensionDiscovery.Build("extension=curl\n", ["php_curl.dll"], ["Core", "ctype", "curl", "json", "Zend OPcache", "xdebug"]);
+        // ctype, json, dom... have neither an ini line nor a DLL on Windows builds
+        var list = ExtensionDiscovery.Build($"[PHP]{Environment.NewLine}extension=curl{Environment.NewLine}", ["php_curl.dll"]);
 
-        Assert.Equal(["ctype", "curl", "json"], list.Select(e => e.Name));
-        var ctype = list.Single(e => e.Name == "ctype");
-        Assert.True(ctype.IsBuiltIn);
-        Assert.True(ctype.Enabled);
-        Assert.False(list.Single(e => e.Name == "curl").IsBuiltIn);
+        Assert.Equal(["curl"], list.Select(e => e.Name));
+        Assert.All(list, e => Assert.NotEqual("core", e.Name.ToLowerInvariant()));
     }
 
     [Fact]
@@ -106,9 +104,9 @@ public class ExtensionChangesTests
     }
 
     [Fact]
-    public void MatchingState_AndBuiltIns_AreNotChanges()
+    public void MatchingState_IsNotAChange()
     {
-        var changes = ExtensionDiscovery.Changes(";extension=gd\n", [Ext("gd", false), Ext("json", false, ExtensionKind.BuiltIn)]);
+        var changes = ExtensionDiscovery.Changes(";extension=gd\n", [Ext("gd", false)]);
 
         Assert.Empty(changes);
     }

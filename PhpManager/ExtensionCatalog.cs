@@ -12,12 +12,11 @@ public static class ExtensionCatalog
     public const string Xml = "XML & data formats";
     public const string Files = "Images, files & archives";
     public const string Math = "Math";
-    public const string Core = "Core & built-in";
     public const string Other = "Other";
 
     /// <summary>Display order of the groups.</summary>
     public static readonly string[] Order =
-        [Database, Caching, Web, Security, Text, Xml, Files, Math, Debugging, Core, Other];
+        [Database, Caching, Web, Security, Text, Xml, Files, Math, Debugging, Other];
 
     private static readonly Dictionary<string, string> Groups = Build();
 
@@ -43,11 +42,11 @@ public static class ExtensionCatalog
         return map;
     }
 
-    /// <summary>The group for an extension; unknown built-ins land in Core, unknown DLLs in Other.</summary>
+    /// <summary>The group for an extension; unrecognised extensions land in Other.</summary>
     public static string GroupOf(string name, ExtensionKind kind) =>
         Groups.TryGetValue(name, out var group)
             ? group
-            : kind == ExtensionKind.BuiltIn ? Core : Other;
+            : Other;
 
     /// <summary>Sort position of a group (unknown groups last).</summary>
     public static int OrderOf(string group)

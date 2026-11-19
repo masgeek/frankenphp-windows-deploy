@@ -38,8 +38,6 @@ public enum ExtensionKind
     Dll,
     /// <summary>zend_extension=name (OPcache, Xdebug).</summary>
     Zend,
-    /// <summary>Compiled into PHP; always on and not configurable.</summary>
-    BuiltIn
 }
 
 public class ExtensionInfo
@@ -47,8 +45,7 @@ public class ExtensionInfo
     public string Name { get; set; } = "";
     public bool Enabled { get; set; }
     public ExtensionKind Kind { get; set; } = ExtensionKind.Dll;
-    public bool IsBuiltIn => Kind == ExtensionKind.BuiltIn;
-    public string Type => Kind switch { ExtensionKind.Zend => "Zend", ExtensionKind.BuiltIn => "Built-in", _ => "DLL" };
+    public string Type => Kind switch { ExtensionKind.Zend => "Zend", _ => "DLL" };
     public string Group => ExtensionCatalog.GroupOf(Name, Kind);
     public int GroupOrder => ExtensionCatalog.OrderOf(Group);
     public string Status => Enabled ? "ON" : "OFF";
@@ -532,10 +529,7 @@ public static class PhpService
             ? Directory.GetFiles(extDir, "php_*.dll").Select(Path.GetFileName).Select(n => n!)
             : [];
 
-        // php -m also reveals the extensions compiled into PHP (ctype, json, ...), which have no ini line.
-        var builtIns = QueryModules(version).Modules;
-
-        return ExtensionDiscovery.Build(File.ReadAllText(phpIni), dlls, builtIns);
+        return ExtensionDiscovery.Build(File.ReadAllText(phpIni), dlls);
     }
 
     /// <summary>What saving would change right now (empty when php.ini already matches).</summary>
@@ -554,7 +548,7 @@ public static class PhpService
         // Clean up any duplicate lines already in the file before applying the new state.
         var content = PhpIniEditor.DeduplicateExtensions(File.ReadAllText(phpIni));
 
-        foreach (var ext in extensions.Where(e => !e.IsBuiltIn))
+        foreach (var ext in extensions)
             content = PhpIniEditor.SetExtensionState(content, ext.Name, ext.Enabled, zend: ext.Kind == ExtensionKind.Zend);
 
         PhpIniBackup.Write(phpIni, content);

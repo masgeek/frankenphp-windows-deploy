@@ -27,6 +27,13 @@
                               Foreground="#1F2937" GridLinesVisibility="None" CanUserAddRows="False"
                               HeadersVisibility="Column" RowBackground="#FFFFFF" AlternatingRowBackground="#F9FAFB"
                               BorderBrush="#D1D5DB" BorderThickness="1">
+                        <DataGrid.ColumnHeaderStyle>
+                            <Style TargetType="DataGridColumnHeader">
+                                <Setter Property="Padding" Value="12,6"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                            </Style>
+                        </DataGrid.ColumnHeaderStyle>
                         <DataGrid.GroupStyle>
                             <GroupStyle>
                                 <GroupStyle.ContainerStyle>
@@ -51,35 +58,25 @@
                             </GroupStyle>
                         </DataGrid.GroupStyle>
                         <DataGrid.Columns>
-                            <DataGridCheckBoxColumn Header="Enabled" Binding="{Binding Enabled, UpdateSourceTrigger=PropertyChanged}" Width="70">
+                            <DataGridCheckBoxColumn Header="Enabled" Binding="{Binding Enabled, UpdateSourceTrigger=PropertyChanged}" Width="90" MinWidth="80">
                                 <DataGridCheckBoxColumn.ElementStyle>
                                     <Style TargetType="CheckBox">
                                         <Setter Property="HorizontalAlignment" Value="Center"/>
                                         <Setter Property="VerticalAlignment" Value="Center"/>
                                         <Setter Property="IsEnabled" Value="True"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsBuiltIn}" Value="True">
-                                                <Setter Property="IsEnabled" Value="False"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
                                     </Style>
                                 </DataGridCheckBoxColumn.ElementStyle>
                                 <DataGridCheckBoxColumn.EditingElementStyle>
                                     <Style TargetType="CheckBox">
                                         <Setter Property="HorizontalAlignment" Value="Center"/>
                                         <Setter Property="VerticalAlignment" Value="Center"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsBuiltIn}" Value="True">
-                                                <Setter Property="IsEnabled" Value="False"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
                                     </Style>
                                 </DataGridCheckBoxColumn.EditingElementStyle>
                             </DataGridCheckBoxColumn>
-                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" IsReadOnly="True" Width="*"/>
-                            <DataGridTextColumn Header="Type" Binding="{Binding Type}" IsReadOnly="True" Width="80"/>
-                            <DataGridTextColumn Header="Laravel" Binding="{Binding Laravel}" IsReadOnly="True" Width="70"/>
-                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" IsReadOnly="True" Width="100"/>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" IsReadOnly="True" Width="*" MinWidth="180"/>
+                            <DataGridTextColumn Header="Type" Binding="{Binding Type}" IsReadOnly="True" Width="100" MinWidth="80"/>
+                            <DataGridTextColumn Header="Laravel" Binding="{Binding Laravel}" IsReadOnly="True" Width="100" MinWidth="80"/>
+                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" IsReadOnly="True" Width="100" MinWidth="80"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 <WrapPanel Grid.Row="2" Margin="0,8,0,0">

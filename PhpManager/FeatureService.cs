@@ -267,7 +267,7 @@ public static class FeatureService
             if (value != null)
                 bundle.Directives[key] = value;
 
-        var extensions = PhpService.GetExtensions(active).Where(e => !e.IsBuiltIn).ToList();
+        var extensions = PhpService.GetExtensions(active);
         bundle.EnabledExtensions = extensions.Where(e => e.Enabled && e.Kind == ExtensionKind.Dll).Select(e => e.Name).ToList();
         bundle.DisabledExtensions = extensions.Where(e => !e.Enabled && e.Kind == ExtensionKind.Dll).Select(e => e.Name).ToList();
         bundle.OpcacheLoaded = PhpService.IsOpcacheLoaded(active);
