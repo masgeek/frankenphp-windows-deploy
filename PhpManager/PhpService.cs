@@ -1121,34 +1121,12 @@ public static class PhpService
     /// version-free name (e.g. php_xdebug-3.5.3-8.4-nts-vs17-x86_64.dll becomes php_xdebug.dll).
     /// </summary>
     /// <returns>The path of the installed DLL.</returns>
-    public static string InstallExtensionDll(string extractPath, string extDir, string extensionName, string? expectedFileName = null)
+    public static string InstallExtensionDll(string extractPath, string extDir, string extensionName, string? expectedFileName = null,
+        (string MajorMinor, string ThreadSafety, string Architecture)? build = null)
     {
-        var canonical = $"php_{extensionName}.dll";
-        var target = Path.Combine(extDir, canonical);
-
-        var candidates = Directory.GetFiles(extractPath, $"php_{extensionName}*.dll", SearchOption.AllDirectories);
-        if (candidates.Length == 0)
-            candidates = Directory.GetFiles(extractPath, "*.dll", SearchOption.AllDirectories);
-
-        if (candidates.Length == 0)
-            throw new FileNotFoundException($"{canonical} not found in downloaded package.");
-
-        // 1. Exact canonical name, 2. the build-specific name we expect, 3. newest by file name.
-        var source = candidates.FirstOrDefault(c => Path.GetFileName(c) == canonical)
-            ?? candidates.FirstOrDefault(c => expectedFileName != null &&
-                Path.GetFileName(c).Equals(expectedFileName, StringComparison.OrdinalIgnoreCase))
-            ?? candidates.OrderByDescending(c => Path.GetFileName(c), StringComparer.OrdinalIgnoreCase).First();
-
-        File.Copy(source, target, overwrite: true);
-
-        // Drop any other versioned copies of the same extension so only the canonical name remains.
-        foreach (var stray in Directory.GetFiles(extDir, $"php_{extensionName}-*.dll", SearchOption.TopDirectoryOnly))
-        {
-            try { File.Delete(stray); } catch { }
-        }
-
-        LogWindow.Log($"Installed {Path.GetFileName(source)} as {canonical}.");
-        return target;
+        var source = ExtensionDllSelector.CopyBest(extractPath, extDir, extensionName, expectedFileName, build);
+        LogWindow.Log($"Installed {Path.GetFileName(source)} as php_{extensionName}.dll.");
+        return Path.Combine(extDir, $"php_{extensionName}.dll");
     }
 
     public static void ConfigureXdebug(string version, XdebugConfig config)
@@ -1269,8 +1247,9 @@ public static class PhpService
             progress?.Report("Installing as php_pdo_sqlsrv.dll / php_sqlsrv.dll...");
             try
             {
-                InstallExtensionDll(extractPath, extDir, "pdo_sqlsrv");
-                InstallExtensionDll(extractPath, extDir, "sqlsrv");
+                var build = (majorMinor, threadSafety, architecture);
+                InstallExtensionDll(extractPath, extDir, "pdo_sqlsrv", build: build);
+                InstallExtensionDll(extractPath, extDir, "sqlsrv", build: build);
             }
             catch (FileNotFoundException ex)
             {
@@ -1281,6 +1260,9 @@ public static class PhpService
             progress?.Report("Enabling in php.ini...");
             EnableExtension(phpIni, "pdo_sqlsrv");
             EnableExtension(phpIni, "sqlsrv");
+
+            progress?.Report("Checking that PHP loads the drivers...");
+            EnsureExtensionsLoad(version, phpIni, ["pdo_sqlsrv", "sqlsrv"]);
 
             progress?.Report($"SQL Server drivers {driverVersion} installed successfully.");
         }
@@ -1775,12 +1757,7 @@ public static class PhpService
             EnableExtension(phpIni, extensionName);
 
             progress?.Report("Verifying...");
-            var modules = GetLoadedModules(Path.GetFileName(installDir));
-            foreach (var mod in verifyModules)
-            {
-                if (!modules.Contains(mod, StringComparer.OrdinalIgnoreCase))
-                    throw new Exception($"{label} was installed but PHP could not load {mod}.");
-            }
+            EnsureExtensionsLoad(Path.GetFileName(installDir), phpIni, verifyModules);
 
             progress?.Report($"{label} installed successfully.");
             LogWindow.LogSuccess($"{label} installed and verified.");
@@ -1789,6 +1766,26 @@ public static class PhpService
         {
             CleanupTemp(archive, extractPath);
         }
+    }
+
+    /// <summary>
+    /// Runs php -m after an install. If an extension did not load it is switched off again (so PHP starts cleanly)
+    /// and the PHP reason is raised, instead of leaving a broken php.ini behind.
+    /// </summary>
+    private static void EnsureExtensionsLoad(string version, string phpIni, IReadOnlyList<string> names)
+    {
+        var query = QueryModules(version);
+        if (query.TimedOut)
+            return; // can't tell; leave it enabled and let Verify report
+
+        var missing = names.Where(n => !query.Modules.Contains(n, StringComparer.OrdinalIgnoreCase)).ToList();
+        if (missing.Count == 0)
+            return;
+
+        PhpIniBackup.Write(phpIni, PhpIniEditor.DisableExtensions(File.ReadAllText(phpIni), missing));
+        var reasons = missing.Select(n => $"{n}: {(query.LoadFailures.TryGetValue(n, out var why) ? why : "PHP did not load it")}");
+        throw new InvalidOperationException(
+            $"The driver was copied but PHP could not load it, so it was switched off again. {string.Join("; ", reasons)}");
     }
 
     private static void EnableExtension(string phpIniPath, string extensionName)

@@ -88,3 +88,114 @@ public class XdebugModesTests
         Assert.Equal(["coverage", "debug", "develop"], XdebugModes.Parse(formatted).OrderBy(m => m));
     }
 }
+
+public class ExtensionDllSelectorTests
+{
+    // The layout of the Microsoft msphpsql release zip: one DLL per PHP version, thread-safety and architecture.
+    private static readonly string[] SqlsrvZip =
+    [
+        @"x64\php_pdo_sqlsrv_81_nts.dll", @"x64\php_pdo_sqlsrv_81_ts.dll",
+        @"x64\php_pdo_sqlsrv_82_nts.dll", @"x64\php_pdo_sqlsrv_82_ts.dll",
+        @"x64\php_pdo_sqlsrv_83_nts.dll", @"x64\php_pdo_sqlsrv_83_ts.dll",
+        @"x64\php_pdo_sqlsrv_84_nts.dll", @"x64\php_pdo_sqlsrv_84_ts.dll",
+        @"x86\php_pdo_sqlsrv_83_nts.dll", @"x86\php_pdo_sqlsrv_83_ts.dll",
+        @"x86\php_pdo_sqlsrv_84_nts.dll", @"x86\php_pdo_sqlsrv_84_ts.dll"
+    ];
+
+    [Theory]
+    [InlineData("8.3", "nts", "x64", @"x64\php_pdo_sqlsrv_83_nts.dll")]
+    [InlineData("8.3", "ts", "x64", @"x64\php_pdo_sqlsrv_83_ts.dll")]
+    [InlineData("8.1", "nts", "x64", @"x64\php_pdo_sqlsrv_81_nts.dll")]
+    [InlineData("8.4", "nts", "x86", @"x86\php_pdo_sqlsrv_84_nts.dll")]
+    public void ChoosesTheBuildMatchingVersionThreadSafetyAndArchitecture(string mm, string ts, string arch, string expected)
+    {
+        Assert.Equal(expected, ExtensionDllSelector.Choose(SqlsrvZip, mm, ts, arch));
+    }
+
+    [Fact]
+    public void NoBuildForThisPhp_ReturnsNull_RatherThanTheWrongOne()
+    {
+        Assert.Null(ExtensionDllSelector.Choose(SqlsrvZip, "7.4", "nts", "x64"));
+        Assert.Null(ExtensionDllSelector.Choose(SqlsrvZip, "8.5", "nts", "x64"));
+        Assert.Null(ExtensionDllSelector.Choose(SqlsrvZip.Where(p => p.StartsWith("x64")), "8.3", "nts", "x86"));
+    }
+
+    [Fact]
+    public void OldNaive_AlphabeticallyLast_WouldHaveBeenWrong()
+    {
+        var naive = SqlsrvZip.OrderByDescending(p => Path.GetFileName(p), StringComparer.OrdinalIgnoreCase).First();
+
+        Assert.NotEqual(ExtensionDllSelector.Choose(SqlsrvZip, "8.3", "nts", "x64"), naive);
+    }
+
+    [Fact]
+    public void ArchitectureCanBeInTheFileName_OrJustTheFolder()
+    {
+        var files = new[] { "php_redis-6.3.0-8.3-nts-vs16-x86.dll", "php_redis-6.3.0-8.3-nts-vs16-x64.dll" };
+
+        Assert.Equal("php_redis-6.3.0-8.3-nts-vs16-x64.dll", ExtensionDllSelector.Choose(files, "8.3", "nts", "x64"));
+    }
+
+    [Fact]
+    public void SingleUnlabelledDll_IsAccepted()
+    {
+        Assert.Equal("php_redis.dll", ExtensionDllSelector.Choose(["php_redis.dll"], "8.3", "nts", "x64"));
+    }
+
+    [Fact]
+    public void MoreSpecificFile_BeatsAnUnlabelledOne()
+    {
+        var chosen = ExtensionDllSelector.Choose(["php_x.dll", "x64/php_x_83_nts.dll"], "8.3", "nts", "x64");
+
+        Assert.Equal("x64/php_x_83_nts.dll", chosen);
+    }
+
+    [Fact]
+    public void Parse_ReadsVersionThreadSafetyAndArch()
+    {
+        var v = ExtensionDllSelector.Parse(@"C:\tmp\x64\php_sqlsrv_82_ts.dll");
+
+        Assert.Equal("8.2", v.MajorMinor);
+        Assert.Equal("ts", v.ThreadSafety);
+        Assert.Equal("x64", v.Arch);
+    }
+
+    [Fact]
+    public void Available_ListsTheOfferedBuilds_ForErrorMessages()
+    {
+        var text = ExtensionDllSelector.Available(SqlsrvZip);
+
+        Assert.Contains("PHP 8.1 NTS x64", text);
+        Assert.Contains("PHP 8.4 TS x86", text);
+    }
+
+    [Fact]
+    public void CopyBest_CopiesTheMatchingBuild_AndRejectsWhenNoneMatches()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "php-manager-dll-" + Guid.NewGuid().ToString("N"));
+        var pkg = Path.Combine(root, "pkg");
+        var ext = Directory.CreateDirectory(Path.Combine(root, "ext")).FullName;
+        try
+        {
+            foreach (var rel in SqlsrvZip)
+            {
+                var path = Path.Combine(pkg, rel);
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllText(path, rel); // content records which build this is
+            }
+
+            ExtensionDllSelector.CopyBest(pkg, ext, "pdo_sqlsrv", null, ("8.3", "nts", "x64"));
+
+            Assert.Equal(@"x64\php_pdo_sqlsrv_83_nts.dll", File.ReadAllText(Path.Combine(ext, "php_pdo_sqlsrv.dll")));
+
+            var ex = Assert.Throws<FileNotFoundException>(() =>
+                ExtensionDllSelector.CopyBest(pkg, ext, "pdo_sqlsrv", null, ("7.4", "nts", "x64")));
+            Assert.Contains("7.4", ex.Message);
+            Assert.Contains("PHP 8.3 NTS x64", ex.Message);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
