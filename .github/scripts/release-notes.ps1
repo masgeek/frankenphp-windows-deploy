@@ -68,11 +68,11 @@ function Get-ReleaseNote([string]$body) {
 }
 
 # ---- classify ---------------------------------------------------------------
-$userFacing = [ordered]@{ breaking = @(); feature = @(); fix = @(); performance = @(); other = @() }
+$userFacing = [ordered]@{ breaking = @(); feature = @(); fix = @(); performance = @(); other = @(); dependencies = @() }
 $maintenance = [System.Collections.Generic.List[string]]::new()
 
 foreach ($n in $numbers) {
-    $json = gh pr view $n --repo $Repo --json number,title,body,labels,url,author 2>$null
+    $json = gh pr view $n --repo $Repo --json number,title,body,labels,url,author,files 2>$null
     if ($LASTEXITCODE -ne 0 -or -not $json) { continue }  # not a PR number (e.g. an issue ref in a commit subject)
     $pr = $json | ConvertFrom-Json
 
@@ -91,6 +91,17 @@ foreach ($n in $numbers) {
 
     $note = Get-ReleaseNote $pr.body
     if ($note -and $note -match '^\W*none\W*$') { $category = 'maintenance'; $note = $null }
+
+    # What a PR changed beats what its title says: only files under PhpManager/ affect the app.
+    $appFiles = @($pr.files | Where-Object { $_.path -like 'PhpManager/*' })
+    $touchesApp = $appFiles.Count -gt 0
+    if (-not $note) {
+        # Tooling-only PRs (CI, release scripts, docs) are maintenance even if titled feat/fix.
+        if (-not $touchesApp -and $category -in 'feature', 'fix', 'performance', 'other') { $category = 'maintenance' }
+        # Dependency bumps that change the app's own packages are worth showing to users.
+        $touchesProject = @($appFiles | Where-Object { $_.path -like '*.csproj' }).Count -gt 0
+        if ($category -eq 'maintenance' -and $touchesProject) { $category = 'dependencies' }
+    }
 
     if ($category -eq 'maintenance' -and -not $note) {
         $maintenance.Add(('- {0} {1}' -f (Get-CleanTitle $pr.title), $link))
@@ -115,6 +126,7 @@ $sections = [ordered]@{
     fix         = [char]::ConvertFromUtf32(0x1F41B) + ' Fixes'
     performance = [char]::ConvertFromUtf32(0x26A1) + ' Performance'
     other       = 'Other changes'
+    dependencies = [char]::ConvertFromUtf32(0x1F4E6) + ' Dependency updates'
 }
 
 $out = [System.Collections.Generic.List[string]]::new()
