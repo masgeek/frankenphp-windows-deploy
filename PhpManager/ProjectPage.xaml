@@ -1,0 +1,44 @@
+<UserControl x:Class="PhpManager.ProjectPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:PhpManager">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="8">
+            <TextBlock Text="Project PHP" Style="{StaticResource HeaderText}" Margin="0,0,0,4"/>
+            <TextBlock Text="Pick a project folder to see which installed PHP version it needs, and pin that version to the folder without changing your global active version."
+                       Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,0,0,16"/>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="Project folder" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="FolderText" Grid.Column="0" Text="(none selected)" Foreground="#1F2937" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                        <Button x:Name="BrowseBtn" Grid.Column="1" Content="Browse..." Style="{StaticResource ActionButton}" Margin="8,0,0,0" Click="Browse_Click"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="Requirement" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
+                    <TextBlock x:Name="RequirementText" Foreground="#1F2937" TextWrapping="Wrap" Text="Select a folder."/>
+
+                    <TextBlock Text="Installed versions that satisfy it" Style="{StaticResource SubText}" Margin="0,12,0,4"/>
+                    <ListBox x:Name="MatchList" Background="#FFFFFF" Foreground="#1F2937" BorderBrush="#D1D5DB" BorderThickness="1" Height="110"/>
+
+                    <WrapPanel Margin="0,8,0,0">
+                        <Button x:Name="PinBtn" Content="Pin selected to this folder" Style="{StaticResource ActionButton}" Margin="0,0,8,0" Click="Pin_Click" IsEnabled="False"/>
+                    </WrapPanel>
+                    <TextBlock Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,8,0,0"
+                               Text="Pinning writes a .php-version file and a php.cmd shim into the folder. In Command Prompt, running php there uses the pinned version. In PowerShell run .\php instead."/>
+                </StackPanel>
+            </Border>
+
+            <local:StatusBar x:Name="StatusBar"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
