@@ -58,7 +58,7 @@ jobs:
           fetch-depth: 0   # release-notes.ps1 needs history and tags
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
