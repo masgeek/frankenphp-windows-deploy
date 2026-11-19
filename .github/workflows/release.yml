@@ -143,7 +143,9 @@ jobs:
           # Publishing is the last step: once published, the release is immutable.
           # Releases have no comments (unlike issues/PRs), so the download details
           # go into the notes, before publishing.
-          $notes = gh release view $env:VERSION --json body -q .body
+          # Native command output is an array of lines; interpolating it into a string
+          # would join the lines with spaces and flatten the markdown, so join explicitly.
+          $notes = (gh release view $env:VERSION --json body -q .body) -join "`n"
           if ($notes -notmatch 'SHA-256:') {
             $sha = (Get-FileHash $env:ZIP -Algorithm SHA256).Hash.ToLower()
             $footer = @(
