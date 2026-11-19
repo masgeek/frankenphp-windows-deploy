@@ -23,7 +23,7 @@
 
                     <WrapPanel>
                         <Button x:Name="DetectBtn" Content="Detect from active PHP" Style="{StaticResource ActionButton}" Margin="0,0,8,0" Click="Detect_Click"/>
-                        <Button x:Name="ParseBtn" Content="Analyse pasted output" Background="#D1D5DB" Foreground="#374151"
+                        <Button x:Name="ParseBtn" Content="Analyse pasted output" Style="{StaticResource SecondaryButton}"
                                 BorderThickness="0" Padding="16,8" FontWeight="SemiBold" Click="Parse_Click"/>
                     </WrapPanel>
 
@@ -111,7 +111,7 @@
                         <ComboBox x:Name="VersionBox" Grid.Column="0" Text="3.5.3" IsEditable="True"
                                   Background="#FFFFFF" Foreground="#1F2937"
                                   BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
-                        <Button x:Name="RefreshVersionsBtn" Grid.Column="1" Content="Fetch versions" Background="#D1D5DB" Foreground="#374151"
+                        <Button x:Name="RefreshVersionsBtn" Grid.Column="1" Content="Fetch versions" Style="{StaticResource SecondaryButton}"
                                 BorderThickness="0" Padding="12,6" Margin="8,0,0,0" Click="RefreshVersions_Click"/>
                         <Button x:Name="DownloadBtn" Grid.Column="2" Content="Download DLL" Style="{StaticResource ActionButton}"
                                 Margin="8,0,0,0" Padding="12,6" Click="Download_Click"/>
@@ -129,16 +129,15 @@
                         </Grid.ColumnDefinitions>
 
                         <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                            <TextBlock Text="Mode" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
-                            <ComboBox x:Name="ModeBox" SelectedIndex="3" Background="#FFFFFF" Foreground="#1F2937"
-                                      BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14">
-                                <ComboBoxItem Content="off"/>
-                                <ComboBoxItem Content="develop"/>
-                                <ComboBoxItem Content="debug"/>
-                                <ComboBoxItem Content="profile"/>
-                                <ComboBoxItem Content="trace"/>
-                                <ComboBoxItem Content="coverage"/>
-                            </ComboBox>
+                            <TextBlock Text="Mode (select any)" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
+                            <WrapPanel x:Name="ModePanel">
+                                <CheckBox Content="develop" Tag="develop" Style="{StaticResource DarkCheckBox}" Margin="0,2,16,2" ToolTip="Development helpers: better var_dump and stack traces"/>
+                                <CheckBox Content="debug" Tag="debug" Style="{StaticResource DarkCheckBox}" Margin="0,2,16,2" ToolTip="Step debugging from your IDE"/>
+                                <CheckBox Content="profile" Tag="profile" Style="{StaticResource DarkCheckBox}" Margin="0,2,16,2" ToolTip="Write profiling output"/>
+                                <CheckBox Content="trace" Tag="trace" Style="{StaticResource DarkCheckBox}" Margin="0,2,16,2" ToolTip="Write function traces"/>
+                                <CheckBox Content="coverage" Tag="coverage" Style="{StaticResource DarkCheckBox}" Margin="0,2,16,2" ToolTip="Code coverage (for PHPUnit)"/>
+                                <CheckBox Content="gcstats" Tag="gcstats" Style="{StaticResource DarkCheckBox}" Margin="0,2,16,2" ToolTip="Garbage collection statistics"/>
+                            </WrapPanel>
                         </StackPanel>
 
                         <StackPanel Grid.Column="1">
@@ -161,20 +160,34 @@
 
                         <StackPanel Grid.Column="0" Margin="0,0,8,0">
                             <TextBlock Text="Client host" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
-                            <TextBox x:Name="HostBox" Text="127.0.0.1" Background="#FFFFFF" Foreground="#1F2937"
-                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
+                            <ComboBox x:Name="HostBox" IsEditable="True" Text="127.0.0.1" Background="#FFFFFF" Foreground="#1F2937"
+                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14">
+                                <ComboBoxItem Content="127.0.0.1"/>
+                                <ComboBoxItem Content="localhost"/>
+                                <ComboBoxItem Content="host.docker.internal"/>
+                            </ComboBox>
                         </StackPanel>
 
                         <StackPanel Grid.Column="1" Margin="0,0,8,0">
                             <TextBlock Text="Client port" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
-                            <TextBox x:Name="PortBox" Text="9003" Background="#FFFFFF" Foreground="#1F2937"
-                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
+                            <ComboBox x:Name="PortBox" IsEditable="True" Text="9003" Background="#FFFFFF" Foreground="#1F2937"
+                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14">
+                                <ComboBoxItem Content="9003"/>
+                                <ComboBoxItem Content="9000"/>
+                                <ComboBoxItem Content="9001"/>
+                            </ComboBox>
                         </StackPanel>
 
                         <StackPanel Grid.Column="2">
                             <TextBlock Text="IDE key" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
-                            <TextBox x:Name="IdeKeyBox" Text="phpstorm" Background="#FFFFFF" Foreground="#1F2937"
-                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14"/>
+                            <ComboBox x:Name="IdeKeyBox" IsEditable="True" Text="phpstorm" Background="#FFFFFF" Foreground="#1F2937"
+                                     BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" FontSize="14">
+                                <ComboBoxItem Content="phpstorm"/>
+                                <ComboBoxItem Content="vscode"/>
+                                <ComboBoxItem Content="PHPSTORM"/>
+                                <ComboBoxItem Content="netbeans-xdebug"/>
+                                <ComboBoxItem Content="XDEBUG_ECLIPSE"/>
+                            </ComboBox>
                         </StackPanel>
                     </Grid>
 
@@ -185,9 +198,9 @@
 
                     <WrapPanel Margin="0,16,0,0">
                         <Button x:Name="ApplyBtn" Content="Apply to php.ini" Style="{StaticResource ActionButton}" Margin="0,0,8,0" Click="Apply_Click"/>
-                        <Button x:Name="VerifyBtn" Content="Verify" Background="#D1D5DB" Foreground="#374151"
+                        <Button x:Name="VerifyBtn" Content="Verify" Style="{StaticResource SecondaryButton}"
                                 BorderThickness="0" Padding="16,8" FontWeight="SemiBold" Margin="0,0,8,0" Click="Verify_Click"/>
-                        <Button x:Name="CopyBtn" Content="Copy ini snippet" Background="#D1D5DB" Foreground="#374151"
+                        <Button x:Name="CopyBtn" Content="Copy ini snippet" Style="{StaticResource SecondaryButton}"
                                 BorderThickness="0" Padding="16,8" FontWeight="SemiBold" Click="Copy_Click"/>
                     </WrapPanel>
 

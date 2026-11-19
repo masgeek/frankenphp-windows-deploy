@@ -12,18 +12,73 @@ public partial class VersionsPage : UserControl
     public VersionsPage()
     {
         InitializeComponent();
-        Loaded += (_, _) => RefreshAll();
+        Loaded += async (_, _) =>
+        {
+            await RefreshAllAsync();
+            // Fresh machine: no cached catalog yet, so fetch it automatically.
+            if (!PhpService.HasCatalogCache() && RefreshCatalogBtn.IsEnabled)
+                await RefreshCatalogCoreAsync();
+        };
     }
 
-    private void RefreshAll()
+    private async Task RefreshAllAsync()
     {
-        LoadInstalled();
         LoadAvailable();
+        await LoadInstalledAsync();
+        ShowUpdates();
     }
 
-    private void LoadInstalled()
+    private void ShowUpdates()
     {
-        _installedVersions = PhpService.GetInstalledVersions();
+        var installed = _installedVersions
+            .Where(v => v.Installed && !v.IsFrankenPhp && !v.IsExternal)
+            .Select(v => v.DetectedVersion ?? v.Version);
+
+        var updates = UpdateChecker.FindUpdates(installed, _availableVersions);
+        UpdatesList.ItemsSource = updates;
+        UpdatesCard.Visibility = updates.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (updates.Count > 0)
+            UpdatesList.SelectedIndex = 0;
+    }
+
+    private async void Update_Click(object sender, RoutedEventArgs e)
+    {
+        if (UpdatesList.SelectedItem is not PhpUpdate update)
+        {
+            StatusBar.SetStatus("Select an update first.");
+            return;
+        }
+
+        var old = _installedVersions.FirstOrDefault(v => (v.DetectedVersion ?? v.Version) == update.Installed && !v.IsFrankenPhp);
+        if (old == null)
+        {
+            StatusBar.SetStatus($"PHP {update.Installed} is no longer installed.");
+            return;
+        }
+
+        SetButtonsEnabled(false);
+        StatusBar.SetStatus($"Updating {update.Installed} to {update.Latest}...", true);
+        try
+        {
+            var message = await FeatureService.UpgradeAsync(old.Version, update.Latest,
+                new Progress<string>(m => Dispatcher.Invoke(() => StatusBar.SetStatus(m, true))));
+            await RefreshAllAsync();
+            StatusBar.SetStatus(message);
+        }
+        catch (Exception ex)
+        {
+            StatusBar.SetStatus($"Error: {ex.Message}");
+        }
+        finally
+        {
+            SetButtonsEnabled(true);
+        }
+    }
+
+    private async Task LoadInstalledAsync()
+    {
+        // Reads php.exe versions (spawns processes); keep it off the UI thread.
+        _installedVersions = await Task.Run(PhpService.GetInstalledVersions);
         InstalledList.ItemsSource = null;
         InstalledList.ItemsSource = _installedVersions;
         var active = PhpService.GetActiveVersion();
@@ -47,12 +102,15 @@ public partial class VersionsPage : UserControl
         RemoveBtn.IsEnabled = enabled;
         RefreshCatalogBtn.IsEnabled = enabled;
         InstallBtn.IsEnabled = enabled;
+        UpdateBtn.IsEnabled = enabled;
         SystemPathCheck.IsEnabled = enabled;
     }
 
-    private void Refresh_Click(object sender, RoutedEventArgs e) => RefreshAll();
+    private async void Refresh_Click(object sender, RoutedEventArgs e) => await RefreshAllAsync();
 
-    private async void RefreshCatalog_Click(object sender, RoutedEventArgs e)
+    private async void RefreshCatalog_Click(object sender, RoutedEventArgs e) => await RefreshCatalogCoreAsync();
+
+    private async Task RefreshCatalogCoreAsync()
     {
         SetButtonsEnabled(false);
         StatusBar.SetStatus("Refreshing catalog...", true);
@@ -60,6 +118,7 @@ public partial class VersionsPage : UserControl
         {
             var count = await PhpService.RefreshCatalogAsync();
             LoadAvailable();
+            ShowUpdates();
             StatusBar.SetStatus($"Catalog refreshed: {count} versions available.");
         }
         catch (Exception ex)
@@ -87,11 +146,11 @@ public partial class VersionsPage : UserControl
         {
             var result = await PhpService.InstallVersionAsync(version, new Progress<string>(msg =>
                 Dispatcher.Invoke(() => StatusBar.SetStatus(msg, true))));
-            ConfigureIni(version);
-            StatusBar.SetStatus($"{result}. Setting as active...", true);
+            var iniResult = ConfigureIni(version);
+            StatusBar.SetStatus($"{result}. {iniResult} Setting as active...", true);
             PhpService.SetActiveVersion(version, SystemPathCheck.IsChecked == true);
-            RefreshAll();
-            StatusBar.SetStatus($"PHP {version} installed and set as active.");
+            await RefreshAllAsync();
+            StatusBar.SetStatus($"PHP {version} installed and set as active. {iniResult}");
         }
         catch (Exception ex)
         {
@@ -103,12 +162,18 @@ public partial class VersionsPage : UserControl
         }
     }
 
-    private void SetActive_Click(object sender, RoutedEventArgs e)
+    private async void SetActive_Click(object sender, RoutedEventArgs e)
     {
         var selected = InstalledList.SelectedItem as PhpVersionInfo;
         if (selected == null)
         {
             StatusBar.SetStatus("Select an installed version first.");
+            return;
+        }
+
+        if (selected.IsExternal)
+        {
+            StatusBar.SetStatus($"PHP {selected.Version} is already on PATH ({selected.InstallDir}). Install a managed version to switch.");
             return;
         }
 
@@ -155,7 +220,7 @@ public partial class VersionsPage : UserControl
             }
 
             StatusBar.SetStatus(msg);
-            LoadInstalled();
+            await LoadInstalledAsync();
         }
         catch (Exception ex)
         {
@@ -172,6 +237,12 @@ public partial class VersionsPage : UserControl
             return;
         }
 
+        if (selected.IsExternal)
+        {
+            StatusBar.SetStatus("PHP found on PATH is not managed by PHP Manager and can't be removed here.");
+            return;
+        }
+
         var result = MessageBox.Show(
             $"Remove PHP {selected.Version}?\nPath: {selected.InstallDir}",
             "Confirm Remove",
@@ -184,9 +255,21 @@ public partial class VersionsPage : UserControl
         StatusBar.SetStatus($"Removing PHP {selected.Version}...", true);
         try
         {
-            await PhpService.RemoveVersionAsync(selected.Version);
-            StatusBar.SetStatus($"PHP {selected.Version} removed.");
-            RefreshAll();
+            var machinePathPending = await PhpService.RemoveVersionAsync(selected.Version);
+            var msg = $"PHP {selected.Version} removed and PATH updated.";
+
+            if (machinePathPending)
+            {
+                StatusBar.SetStatus("Requesting admin elevation to clean the system PATH...", true);
+                var dir = selected.InstallDir;
+                var ok = await Task.Run(() => PhpService.RunElevated($"--remove-system-path \"{dir}\""));
+                msg = ok
+                    ? $"PHP {selected.Version} removed and PATH updated (including system PATH)."
+                    : $"PHP {selected.Version} removed. System PATH still lists it (admin required to remove).";
+            }
+
+            await RefreshAllAsync();
+            StatusBar.SetStatus(msg);
         }
         catch (Exception ex)
         {
@@ -198,14 +281,26 @@ public partial class VersionsPage : UserControl
         }
     }
 
-    private void ConfigureIni(string version)
+    /// <summary>Creates php.ini per the selected profile; "None" leaves it alone. Failure is reported, not fatal.</summary>
+    private string ConfigureIni(string version)
     {
-        var devIni = Path.Combine(AppContext.BaseDirectory, "php.ini-development");
-        var prodIni = Path.Combine(AppContext.BaseDirectory, "php.ini");
+        var profile = IniProfileCombo.SelectedIndex switch
+        {
+            0 => IniProfile.Development,
+            1 => IniProfile.Production,
+            _ => (IniProfile?)null
+        };
 
-        if (File.Exists(devIni))
-            PhpService.ConfigurePhpIni(version, devIni);
-        else if (File.Exists(prodIni))
-            PhpService.ConfigurePhpIni(version, prodIni);
+        if (profile == null)
+            return "php.ini not created.";
+
+        try
+        {
+            return PhpService.ApplyIniProfile(version, profile.Value);
+        }
+        catch (Exception ex)
+        {
+            return $"php.ini not created: {ex.Message}";
+        }
     }
 }

@@ -220,7 +220,7 @@ public partial class XdebugPage : UserControl
     private void LoadActiveConfig()
     {
         EnabledCheck.IsChecked = false;
-        SelectComboValue(ModeBox, "debug");
+        SetModes("debug");
         HostBox.Text = "127.0.0.1";
         PortBox.Text = "9003";
         IdeKeyBox.Text = "phpstorm";
@@ -233,7 +233,7 @@ public partial class XdebugPage : UserControl
 
         var config = PhpService.ReadXdebugConfig(_activeVersion);
         EnabledCheck.IsChecked = config.Enabled;
-        SelectComboValue(ModeBox, config.Mode);
+        SetModes(config.Mode);
         HostBox.Text = config.ClientHost;
         PortBox.Text = config.ClientPort.ToString();
         IdeKeyBox.Text = config.IdeKey;
@@ -244,7 +244,7 @@ public partial class XdebugPage : UserControl
 
     private void SetFieldsEnabled(bool enabled)
     {
-        ModeBox.IsEnabled = enabled;
+        ModePanel.IsEnabled = enabled;
         HostBox.IsEnabled = enabled;
         PortBox.IsEnabled = enabled;
         IdeKeyBox.IsEnabled = enabled;
@@ -268,7 +268,7 @@ public partial class XdebugPage : UserControl
         var config = new XdebugConfig
         {
             Enabled = EnabledCheck.IsChecked == true,
-            Mode = ComboValue(ModeBox),
+            Mode = GetModes(),
             StartWithRequest = ComboValue(StartCombo),
             ClientHost = HostBox.Text.Trim(),
             ClientPort = int.TryParse(PortBox.Text.Trim(), out var port) ? port : 9003,
@@ -303,7 +303,7 @@ public partial class XdebugPage : UserControl
         lines.Add(EnabledCheck.IsChecked == true
             ? "zend_extension=xdebug"
             : ";zend_extension=xdebug");
-        lines.Add($"xdebug.mode={ComboValue(ModeBox)}");
+        lines.Add($"xdebug.mode={GetModes()}");
         lines.Add($"xdebug.start_with_request={ComboValue(StartCombo)}");
         lines.Add($"xdebug.client_host={HostBox.Text.Trim()}");
         lines.Add($"xdebug.client_port={(int.TryParse(PortBox.Text.Trim(), out var p) ? p : 9003)}");
@@ -312,6 +312,18 @@ public partial class XdebugPage : UserControl
     }
 
     // ---------- helpers ----------
+
+    private IEnumerable<CheckBox> ModeChecks => ModePanel.Children.OfType<CheckBox>();
+
+    private string GetModes() =>
+        XdebugModes.Format(ModeChecks.Where(c => c.IsChecked == true).Select(c => (string)c.Tag));
+
+    private void SetModes(string? value)
+    {
+        var modes = XdebugModes.Parse(value);
+        foreach (var check in ModeChecks)
+            check.IsChecked = modes.Contains((string)check.Tag);
+    }
 
     private static void SelectComboValue(ComboBox combo, string value)
     {

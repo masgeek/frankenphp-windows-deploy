@@ -24,6 +24,23 @@ public static class Urls
     {
         public static string[] Mirrors => ByCategory("PHP Download");
 
+        private static readonly string[] Compilers = ["vs17", "vs16", "vc15", "vc14"];
+
+        /// <summary>
+        /// The template itself first, then the same template with each known compiler token swapped in,
+        /// so versions built with an older compiler still download.
+        /// </summary>
+        internal static IEnumerable<string> ExpandCompilers(string template)
+        {
+            yield return template;
+            foreach (var compiler in Compilers)
+            {
+                var variant = Regex.Replace(template, @"(?i)v[sc]\d+", compiler);
+                if (variant != template)
+                    yield return variant;
+            }
+        }
+
         public static string Package(string version) =>
             string.Format(Mirrors.FirstOrDefault() ?? "", version);
     }
@@ -40,23 +57,23 @@ public static class Urls
         {
             get
             {
-                var template = Mirrors.Length > 0 ? Mirrors[0] : "";
-                if (string.IsNullOrEmpty(template))
-                    template = PhpDownload.Mirrors.FirstOrDefault() ?? "";
+                // The catalog URLs are index pages (no {0}); the filename pattern comes from the download template.
+                var template = PhpDownload.Mirrors.FirstOrDefault(m => m.Contains("{0}")) ?? "";
 
                 return BuildPatternFromTemplate(template, @"(\d+\.\d+\.\d+)");
             }
         }
 
+        internal static IEnumerable<string> ParseVersions(string html, string pattern) =>
+            Regex.Matches(html, pattern, RegexOptions.IgnoreCase)
+                .Select(m => m.Groups[1].Value)
+                .Distinct();
+
         internal static string BuildPatternFromTemplate(string template, string capture)
         {
-            var path = template;
-
-            var hostMatch = Regex.Match(path, @"^https?://[^/]+/(.*)$");
-            if (hostMatch.Success)
-                path = hostMatch.Groups[1].Value;
-
-            path = path.Split('?')[0].Split('#')[0].Trim('/');
+            // Match on the filename only, so every mirror's index page (differing directories) is scraped.
+            var path = template.Split('?')[0].Split('#')[0].Trim('/');
+            path = path[(path.LastIndexOf('/') + 1)..];
 
 var parts = path.Split(new[] { "{0}" }, StringSplitOptions.None);
 
@@ -70,7 +87,9 @@ var parts = path.Split(new[] { "{0}" }, StringSplitOptions.None);
                         "cannot be scraped. Add {0} to the template on the URLs page.");
                 }
 
-                return string.Join(capture, parts.Select(Regex.Escape));
+                // Older PHP lines were built with other compilers (7.x: vc14/vc15, 8.0-8.3: vs16, 8.4+: vs17),
+                // so accept any compiler token or the catalogue would only ever list the newest series.
+                return Regex.Replace(string.Join(capture, parts.Select(Regex.Escape)), @"v[sc]\d+", @"v[sc]\d+");
         }
     }
 
@@ -123,6 +142,11 @@ var parts = path.Split(new[] { "{0}" }, StringSplitOptions.None);
     public static class Servy
     {
         public static string DownloadUrl => Get("Servy", "Download");
+    }
+
+    public static class Composer
+    {
+        public static string DownloadUrl => Get("Composer", "Download");
     }
 
     public static class Cacert

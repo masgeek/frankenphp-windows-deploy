@@ -23,7 +23,7 @@ jobs:
 
       - name: Setup .NET
         id: dotnet
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
@@ -56,6 +56,10 @@ jobs:
       - name: Build
         if: steps.build-cache.outputs.cache-hit != 'true'
         run: dotnet build PhpManager/PhpManager.csproj -c Release --no-restore
+
+      # Always runs (even on a build-cache hit) so test-only changes are still verified.
+      - name: Test
+        run: dotnet test PhpManager.Tests/PhpManager.Tests.csproj -c Release
 
       - name: Publish
         if: steps.build-cache.outputs.cache-hit != 'true'

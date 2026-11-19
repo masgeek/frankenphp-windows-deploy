@@ -22,7 +22,7 @@
 
         <WrapPanel Grid.Row="2" HorizontalAlignment="Right" Margin="0,12,0,0">
             <Button Content="Save" Style="{StaticResource ActionButton}" Margin="0,0,8,0" Click="Save_Click" IsDefault="True"/>
-            <Button Content="Cancel" Background="#D1D5DB" Foreground="#374151"
+            <Button Content="Cancel" Style="{StaticResource SecondaryButton}"
                     BorderThickness="0" Padding="16,8" Click="Cancel_Click"/>
         </WrapPanel>
     </Grid>

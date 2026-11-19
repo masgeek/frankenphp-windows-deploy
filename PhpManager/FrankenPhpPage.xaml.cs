@@ -13,11 +13,89 @@ public partial class FrankenPhpPage : UserControl
     public FrankenPhpPage()
     {
         InitializeComponent();
+        _presets = FrankenPresets.For(Environment.ProcessorCount);
+        PresetCombo.ItemsSource = _presets.Select(p => p.Name).ToList();
+        PresetCombo.SelectedIndex = 0;
+        PresetCombo.SelectionChanged += (_, _) => PresetDescText.Text = SelectedPreset()?.Description ?? "";
+        PresetDescText.Text = SelectedPreset()?.Description ?? "";
         Loaded += (_, _) => RefreshAll();
+    }
+
+    private readonly List<FrankenPresets.Preset> _presets;
+
+    private FrankenPresets.Preset? SelectedPreset() =>
+        PresetCombo.SelectedIndex >= 0 && PresetCombo.SelectedIndex < _presets.Count ? _presets[PresetCombo.SelectedIndex] : null;
+
+    private void ApplyPreset_Click(object sender, RoutedEventArgs e)
+    {
+        var preset = SelectedPreset();
+        if (preset == null)
+            return;
+
+        WorkersBox.Text = preset.Workers.ToString();
+        MaxRequestsBox.Text = preset.MaxRequests.ToString();
+        DevModeCheck.IsChecked = preset.DevMode;
+        StatusBar.SetStatus($"Preset '{preset.Name}' filled into the form ({preset.Workers} worker(s), max requests {preset.MaxRequests}). Click Save Service to apply.");
+    }
+
+    private async void Restart_Click(object sender, RoutedEventArgs e)
+    {
+        var record = ServicesGrid.SelectedItem as FrankenPhpServiceRecord;
+        if (record == null)
+        {
+            StatusBar.SetStatus("Select a service to restart.");
+            return;
+        }
+
+        SetButtonsEnabled(false);
+        StatusBar.SetStatus($"Restarting '{record.ServiceName}'...", true);
+        try
+        {
+            var progress = new Progress<string>(msg => Dispatcher.Invoke(() => StatusBar.SetStatus(msg, true)));
+            if (PhpService.IsServiceRunning(record.ServiceName))
+                await PhpService.StopFrankenPhpServiceAsync(record, progress);
+            await PhpService.StartFrankenPhpServiceAsync(record, progress);
+            StatusBar.SetStatus($"Service '{record.ServiceName}' restarted.");
+            LoadServices();
+        }
+        catch (Exception ex)
+        {
+            StatusBar.SetStatus($"Error: {ex.Message}");
+        }
+        finally
+        {
+            SetButtonsEnabled(true);
+        }
+    }
+
+    private void ViewLog_Click(object sender, RoutedEventArgs e)
+    {
+        var record = ServicesGrid.SelectedItem as FrankenPhpServiceRecord;
+        if (record == null)
+        {
+            StatusBar.SetStatus("Select a service to view its log.");
+            return;
+        }
+
+        var window = new TextViewerWindow($"Log: {record.ServiceName}", () => FeatureService.ReadServiceLog(record.ServiceName))
+        {
+            Owner = Window.GetWindow(this)
+        };
+        window.Show();
+    }
+
+    private void ShowPhpUsed()
+    {
+        var active = PhpService.GetActiveVersion();
+        PhpUsedText.Text = string.IsNullOrEmpty(active)
+            ? "No active PHP version. A service uses the php.ini of the PHP that is active when it is saved."
+            : $"A service uses the php.ini of the PHP that was active when it was saved. Active now: {active} ({PhpService.IniPathFor(active)}). " +
+              "After switching versions or changing php.ini, restart the service (re-save it to point it at a different PHP).";
     }
 
     private void RefreshAll()
     {
+        ShowPhpUsed();
         LoadStatus();
         CheckServy();
         LoadServices();
@@ -331,6 +409,7 @@ public partial class FrankenPhpPage : UserControl
         DeleteBtn.IsEnabled = enabled;
         StartBtn.IsEnabled = enabled;
         StopBtn.IsEnabled = enabled;
+        RestartBtn.IsEnabled = enabled;
         RefreshBtn.IsEnabled = enabled;
     }
 }
