@@ -1,37 +1,107 @@
-
 name: BumpVersion
+
+# Runs only after a successful CI run on a push to main.
+# Tags and releases are created with the munywele-bot GitHub App token.
+# The release is created as a DRAFT (GitHub release immutability locks assets on
+# publish); Publish Release is dispatched next and publishes it once the zip is attached.
 on:
   workflow_run:
-    workflows: ["UnitTests"]
-    types: [completed]
-
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - main
 
 jobs:
   bump-tag-version:
     runs-on: ubuntu-24.04
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.event == 'push'
     permissions:
-      contents: write
+      contents: read
+      actions: write   # dispatch Publish Release (workflow_dispatch via GITHUB_TOKEN is allowed)
     concurrency:
-      cancel-in-progress: true
-      group: bump-version-${{ github.ref }}
+      cancel-in-progress: false
+      group: bump-version
+    outputs:
+      new_tag: ${{ steps.tag_version.outputs.new_tag }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3.3.0
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Determine if there are changes since last tag
+        id: changes
+        run: |
+          git fetch --tags
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            # No previous tag, treat as having changes
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            CHANGED_FILES=$(git diff --name-only "$LAST_TAG..HEAD")
+            # Only app source changes warrant a release
+            if echo "$CHANGED_FILES" | grep -qE '^PhpManager/'; then
+              echo "has_changes=true" >> $GITHUB_OUTPUT
+            else
+              echo "has_changes=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
       - name: Generate Tag
+        if: steps.changes.outputs.has_changes == 'true'
         id: tag_version
         uses: masgeek/github-tag-action@release
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ steps.app-token.outputs.token }}
           tag_prefix: ""
           create_annotated_tag: true
 
       - name: Create a GitHub release
-        uses: ncipollo/release-action@v1.16.0
+        if: steps.changes.outputs.has_changes == 'true'
+        uses: ncipollo/release-action@v1.21.0
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           tag: ${{ steps.tag_version.outputs.new_tag }}
           name: Version ${{ steps.tag_version.outputs.new_tag }}
           body: ${{ steps.tag_version.outputs.changelog }}
-          makeLatest: true
+          draft: true
           allowUpdates: true
           generateReleaseNotes: true
           skipIfReleaseExists: false
+
+      - name: Dispatch Publish Release
+        if: steps.changes.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEW_TAG: ${{ steps.tag_version.outputs.new_tag }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$DEFAULT_BRANCH" -f version="$NEW_TAG"
+
+      - name: Release summary
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          echo "## Release ${{ steps.tag_version.outputs.new_tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "Tag and draft release created; Publish Release publishes it after the zip is attached." >> $GITHUB_STEP_SUMMARY
+
+      - name: Cleanup on failure
+        if: steps.changes.outputs.has_changes == 'true' && failure() && steps.tag_version.outputs.new_tag != ''
+        env:
+          NEW_TAG: ${{ steps.tag_version.outputs.new_tag }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh release delete "$NEW_TAG" --yes || true
+          git push --delete origin "$NEW_TAG" || true
+          git tag -d "$NEW_TAG" || true
