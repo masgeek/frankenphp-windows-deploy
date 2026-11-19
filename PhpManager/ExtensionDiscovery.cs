@@ -19,6 +19,13 @@ public static class ExtensionDiscovery
 
     private const string Name = @"""?(?:[^""\r\n;]*[\\/])?(?:php_)?(?<name>\w+)(?:\.dll)?""?";
 
+    /// <summary>Extensions whose desired state differs from what php.ini currently says (built-ins are never changed).</summary>
+    public static List<ExtensionInfo> Changes(string iniContent, IEnumerable<ExtensionInfo> desired)
+    {
+        var current = Build(iniContent, []).ToDictionary(e => e.Name, e => e.Enabled, StringComparer.OrdinalIgnoreCase);
+        return desired.Where(e => !e.IsBuiltIn && current.GetValueOrDefault(e.Name) != e.Enabled).ToList();
+    }
+
     public static List<ExtensionInfo> Build(string iniContent, IEnumerable<string> dllNames, IEnumerable<string>? builtInModules = null)
     {
         var byName = new Dictionary<string, ExtensionInfo>(StringComparer.OrdinalIgnoreCase);

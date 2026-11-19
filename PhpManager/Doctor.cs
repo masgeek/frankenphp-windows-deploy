@@ -20,6 +20,7 @@ public sealed record DoctorResult(string Name, DoctorStatus Status, string Detai
         "reapply-path" => "Fix PATH",
         "install-composer" => "Install Composer",
         "apply-profile" => "Create php.ini",
+        "dedupe-ini" => "Remove duplicate lines",
         "set-active" => "Set a version active",
         _ => ""
     };
@@ -55,6 +56,16 @@ public static class DoctorEvaluators
         return dirExists(resolved)
             ? new("extension_dir", DoctorStatus.Pass, $"Points to {resolved}.")
             : new("extension_dir", DoctorStatus.Fail, $"extension_dir points to {resolved}, which does not exist.", "apply-profile");
+    }
+
+    /// <summary>The same extension on two lines makes PHP warn "Module already loaded" and makes edits ambiguous.</summary>
+    public static DoctorResult DuplicateExtensionsCheck(string iniContent)
+    {
+        var dups = PhpIniEditor.FindDuplicateExtensions(iniContent);
+        return dups.Count == 0
+            ? new("Duplicate extensions", DoctorStatus.Pass, "Each extension appears once in php.ini.")
+            : new("Duplicate extensions", DoctorStatus.Warn,
+                $"{dups.Count} extension(s) are listed more than once: {string.Join(", ", dups)}.", "dedupe-ini");
     }
 
     public static DoctorResult CaCertCheck(string iniContent, Func<string, bool> fileExists)

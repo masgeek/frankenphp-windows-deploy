@@ -38,7 +38,8 @@ public class LaravelExtensionsTests
 
         var result = LaravelExtensions.Enable(ini, ["curl", "zip"]);
 
-        Assert.Equal("[PHP]\r\nextension=curl\r\nextension=zip\r\n", result);
+        // the original spelling of the line (php_curl.dll) is kept; only the comment marker is removed
+        Assert.Equal("[PHP]\r\nextension=php_curl.dll\r\nextension=zip\r\n", result);
     }
 
     [Fact]

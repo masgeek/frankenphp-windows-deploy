@@ -56,6 +56,7 @@ public static class FeatureService
                 results.Add(new("php.ini", DoctorStatus.Pass, $"Found at {phpIni}."));
                 results.Add(DoctorEvaluators.ExtensionDirCheck(content, dir, Directory.Exists));
                 results.Add(DoctorEvaluators.CaCertCheck(content, File.Exists));
+                results.Add(DoctorEvaluators.DuplicateExtensionsCheck(content));
 
                 if (File.Exists(phpExe))
                 {
@@ -125,6 +126,19 @@ public static class FeatureService
                     return "Set a PHP version active first.";
                 PhpService.SetActiveVersion(active);
                 return "PATH updated for the active version. Open a new terminal to pick it up (system PATH changes need the Versions page checkbox and admin).";
+
+            case "dedupe-ini":
+            {
+                if (string.IsNullOrEmpty(active) || !File.Exists(PhpService.IniPathFor(active)))
+                    return "No php.ini to clean.";
+                var ini = PhpService.IniPathFor(active);
+                var before = File.ReadAllText(ini);
+                var after = PhpIniEditor.DeduplicateExtensions(before);
+                if (after == before)
+                    return "No duplicate extension lines found.";
+                PhpIniBackup.Write(ini, after);
+                return "Removed duplicate extension lines (backup taken).";
+            }
 
             case "install-composer":
                 await ComposerService.InstallAsync(progress);

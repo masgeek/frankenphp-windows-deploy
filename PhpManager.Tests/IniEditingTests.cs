@@ -38,11 +38,87 @@ public class IniEditorExtensionTests
     }
 
     [Fact]
-    public void Enable_WhenAlreadyActive_ChangesNothing()
+    public void Enable_WhenAlreadyActive_KeepsOnlyTheActiveLine()
     {
         const string ini = ";extension=curl\nextension=curl\n";
 
-        Assert.Equal(ini, PhpIniEditor.SetExtensionState(ini, "curl", enabled: true, zend: false));
+        Assert.Equal("extension=curl\n", PhpIniEditor.SetExtensionState(ini, "curl", enabled: true, zend: false));
+    }
+
+    [Fact]
+    public void Enable_WithATemplateLineFirstAndActiveLineLater_DoesNotCreateTwoActiveLines()
+    {
+        const string ini = "[PHP]\n;extension=redis\nfoo=1\nextension=redis\n";
+
+        var result = PhpIniEditor.SetExtensionState(ini, "redis", enabled: true, zend: false);
+
+        Assert.Equal("[PHP]\nfoo=1\nextension=redis\n", result);
+        Assert.Empty(PhpIniEditor.FindDuplicateExtensions(result));
+    }
+
+    [Fact]
+    public void Enable_IsIdempotent_NeverAddsASecondLine()
+    {
+        var once = PhpIniEditor.SetExtensionState("[PHP]\n", "curl", enabled: true, zend: false);
+        var twice = PhpIniEditor.SetExtensionState(once, "curl", enabled: true, zend: false);
+
+        Assert.Equal(once, twice);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(twice, "extension=curl"));
+    }
+
+    [Fact]
+    public void Disable_CollapsesDuplicatesToOneCommentedLine()
+    {
+        var result = PhpIniEditor.SetExtensionState("extension=mysqli\n;extension=mysqli\nextension=php_mysqli.dll\n", "mysqli", enabled: false, zend: false);
+
+        Assert.Equal(";extension=mysqli\n", result);
+    }
+
+    [Fact]
+    public void DeduplicateExtensions_KeepsActiveLine_AndLeavesOtherContentAlone()
+    {
+        const string ini = "[PHP]\n;extension=curl\nextension=curl\n;extension=gd\n;extension=gd\nmemory_limit = 128M\nextension=openssl\n";
+
+        var result = PhpIniEditor.DeduplicateExtensions(ini);
+
+        Assert.Equal("[PHP]\nextension=curl\n;extension=gd\nmemory_limit = 128M\nextension=openssl\n", result);
+    }
+
+    [Fact]
+    public void DeduplicateExtensions_TreatsPhpPrefixAndDllSuffixAsTheSameName_AndZendSeparately()
+    {
+        const string ini = "extension=php_curl.dll\nextension=curl\nextension=opcache\nzend_extension=opcache\n";
+
+        var result = PhpIniEditor.DeduplicateExtensions(ini);
+
+        Assert.Equal("extension=php_curl.dll\nextension=opcache\nzend_extension=opcache\n", result);
+    }
+
+    [Fact]
+    public void DeduplicateExtensions_WithNoDuplicates_ReturnsTheSameText()
+    {
+        const string ini = "[PHP]\r\nextension=curl\r\n;extension=gd\r\n";
+
+        Assert.Same(ini, PhpIniEditor.DeduplicateExtensions(ini));
+    }
+
+    [Fact]
+    public void FindDuplicateExtensions_ListsEachDuplicatedName()
+    {
+        var dups = PhpIniEditor.FindDuplicateExtensions(";extension=a\nextension=a\nextension=b\nextension=PHP_c.dll\n;extension=c\n");
+
+        Assert.Equal(["extension=a", "extension=c"], dups.OrderBy(d => d));
+    }
+
+    [Fact]
+    public void DoctorCheck_WarnsOnDuplicates_AndOffersFix()
+    {
+        var bad = DoctorEvaluators.DuplicateExtensionsCheck("extension=curl\n;extension=curl\n");
+        var good = DoctorEvaluators.DuplicateExtensionsCheck("extension=curl\n");
+
+        Assert.Equal(DoctorStatus.Warn, bad.Status);
+        Assert.Equal("dedupe-ini", bad.FixId);
+        Assert.Equal(DoctorStatus.Pass, good.Status);
     }
 
     [Fact]
@@ -50,7 +126,7 @@ public class IniEditorExtensionTests
     {
         var result = PhpIniEditor.SetExtensionState("extension=pdo\nextension=pdo_mysql\nextension=pdo\n", "pdo", enabled: false, zend: false);
 
-        Assert.Equal(";extension=pdo\nextension=pdo_mysql\n;extension=pdo\n", result);
+        Assert.Equal(";extension=pdo\nextension=pdo_mysql\n", result);
     }
 }
 

@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace PhpManager;
 
 /// <summary>
@@ -25,23 +23,7 @@ public static class LaravelExtensions
     {
         var content = iniContent;
         foreach (var name in names)
-        {
-            var pattern = $@"(?m)^[ \t]*;?[ \t]*extension[ \t]*=[ \t]*(?:php_)?{Regex.Escape(name)}(?:\.dll)?[ \t]*\r?$";
-            var match = Regex.Match(content, pattern);
-            if (match.Success)
-            {
-                if (match.Value.TrimStart().StartsWith(';'))
-                    content = content.Remove(match.Index, match.Length)
-                        .Insert(match.Index, $"extension={name}" + (match.Value.EndsWith('\r') ? "\r" : ""));
-                continue;
-            }
-
-            var nextSection = Regex.Match(content, @"(?m)^\[(?!PHP\])");
-            var directive = $"extension={name}\n";
-            content = nextSection.Success
-                ? content.Insert(nextSection.Index, directive)
-                : content.TrimEnd() + "\n" + directive;
-        }
+            content = PhpIniEditor.SetExtensionState(content, name, enabled: true, zend: false);
 
         return content;
     }

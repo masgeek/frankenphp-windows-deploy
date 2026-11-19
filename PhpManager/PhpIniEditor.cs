@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace PhpManager;
@@ -15,40 +16,83 @@ public static class PhpIniEditor
         return content;
     }
 
+    /// <summary>One extension= or zend_extension= line, active or commented, with optional php_ prefix, .dll suffix, quotes and path.</summary>
+    private const string ExtLine =
+        @"(?m)^(?<indent>[ \t]*)(?<semi>;?)[ \t]*(?<key>zend_extension|extension)[ \t]*=[ \t]*""?(?:[^""\r\n;]*[\\/])?(?:(?i:php_))?(?<name>\w+)(?:(?i:\.dll))?""?[ \t]*(?<cr>\r?)$";
+
     /// <summary>
-    /// Enables or disables <c>extension=name</c> (or <c>zend_extension=name</c> when <paramref name="zend"/>).
-    /// Enabling uncomments the first matching line (or appends one); disabling comments out every active match.
+    /// Enables or disables <c>extension=name</c> (or <c>zend_extension=name</c> when <paramref name="zend"/>) and
+    /// guarantees the name appears on exactly one line afterwards: the first active line is kept (else the first
+    /// commented one) and any other lines for it are removed, so php.ini never ends up with duplicates.
     /// </summary>
     public static string SetExtensionState(string content, string name, bool enabled, bool zend, bool addIfMissing = true)
     {
         var key = zend ? "zend_extension" : "extension";
-        var pattern = $@"(?m)^([ \t]*);?[ \t]*{key}[ \t]*=[ \t]*""?(?:[^""\r\n;]*[\\/])?(?:php_)?{Regex.Escape(name)}(?:\.dll)?""?[ \t]*\r?$";
+        var matches = Regex.Matches(content, ExtLine).Cast<Match>()
+            .Where(m => m.Groups["key"].Value == key && m.Groups["name"].Value.Equals(name, StringComparison.OrdinalIgnoreCase))
+            .ToList();
 
-        var matches = Regex.Matches(content, pattern);
         if (matches.Count == 0)
             return enabled && addIfMissing ? InsertDirective(content, $"{key}={name}") : content;
 
-        var seenActive = false;
-        var index = 0;
-        return Regex.Replace(content, pattern, m =>
+        var keeper = matches.FirstOrDefault(m => m.Groups["semi"].Length == 0) ?? matches[0];
+        var result = new StringBuilder();
+        var pos = 0;
+        foreach (var m in matches)
         {
-            var cr = m.Value.EndsWith('\r') ? "\r" : "";
-            var body = m.Value.TrimEnd('\r').TrimStart(' ', '\t', ';').TrimStart();
-            var wasActive = !m.Value.TrimStart().StartsWith(';');
-            index++;
+            result.Append(content, pos, m.Index - pos);
+            pos = m.Index + m.Length;
 
-            if (enabled)
+            if (m == keeper)
             {
-                // keep exactly one active line: the first match, or the first one that already was active
-                if (wasActive) { seenActive = true; return m.Value; }
-                var isFirst = index == 1;
-                if (isFirst && !matches.Cast<Match>().Any(x => !x.Value.TrimStart().StartsWith(';')))
-                    return body + cr;
-                return m.Value;
+                var body = m.Value.TrimEnd('\r').TrimStart(' ', '\t', ';').TrimStart();
+                result.Append(m.Groups["indent"].Value).Append(enabled ? "" : ";").Append(body).Append(m.Groups["cr"].Value);
             }
+            else if (pos < content.Length && content[pos] == '\n')
+            {
+                pos++; // drop the whole duplicate line, including its line break
+            }
+        }
 
-            return wasActive ? ";" + body + cr : m.Value;
-        });
+        result.Append(content, pos, content.Length - pos);
+        return result.ToString();
+    }
+
+    /// <summary>Names (as key=name) that appear on more than one line, in any state.</summary>
+    public static List<string> FindDuplicateExtensions(string content) =>
+        Regex.Matches(content, ExtLine).Cast<Match>()
+            .GroupBy(m => (m.Groups["key"].Value, m.Groups["name"].Value.ToLowerInvariant()))
+            .Where(g => g.Count() > 1)
+            .Select(g => $"{g.Key.Item1}={g.Key.Item2}")
+            .ToList();
+
+    /// <summary>Collapses every duplicated extension/zend_extension line to one (the active one if any), leaving everything else alone.</summary>
+    public static string DeduplicateExtensions(string content)
+    {
+        var remove = new List<Match>();
+        foreach (var g in Regex.Matches(content, ExtLine).Cast<Match>()
+                     .GroupBy(m => (m.Groups["key"].Value, m.Groups["name"].Value.ToLowerInvariant()))
+                     .Where(g => g.Count() > 1))
+        {
+            var keeper = g.FirstOrDefault(m => m.Groups["semi"].Length == 0) ?? g.First();
+            remove.AddRange(g.Where(m => m != keeper));
+        }
+
+        if (remove.Count == 0)
+            return content;
+
+        var result = new StringBuilder();
+        var pos = 0;
+        foreach (var m in remove.OrderBy(m => m.Index))
+        {
+            result.Append(content, pos, m.Index - pos);
+            pos = m.Index + m.Length;
+            if (pos < content.Length && content[pos] == '\n')
+                pos++;
+        }
+
+        result.Append(content, pos, content.Length - pos);
+        return result.ToString();
     }
 
     /// <summary>The effective (last active) value of a directive, or null when it isn't set. Inline comments and quotes are stripped.</summary>

@@ -61,7 +61,7 @@ public partial class ExtensionsPage : UserControl
                             (missing.Count > 0 ? $" Not in php.ini: {string.Join(", ", missing)}." : ""));
     }
 
-    private void SaveExtensions_Click(object sender, System.Windows.RoutedEventArgs e)
+    private async void SaveExtensions_Click(object sender, System.Windows.RoutedEventArgs e)
     {
         var activeVersion = PhpService.GetActiveVersion();
         if (string.IsNullOrEmpty(activeVersion))
@@ -70,14 +70,39 @@ public partial class ExtensionsPage : UserControl
             return;
         }
 
+        // A checkbox ticked a moment ago may still be in edit mode; commit it so the item holds the new value.
+        ExtensionGrid.CommitEdit(DataGridEditingUnit.Row, true);
+        ExtensionGrid.CommitEdit();
+
+        var snapshot = _extensions.ToList();
+        SaveBtn.IsEnabled = false;
         try
         {
-            PhpService.SaveExtensions(activeVersion, _extensions.ToList());
-            StatusBar.SetStatus($"Saved {_extensions.Count} extension settings.");
+            var pending = await Task.Run(() => PhpService.PendingExtensionChanges(activeVersion, snapshot));
+            if (pending.Count == 0)
+            {
+                StatusBar.SetStatus("No changes to save: the list matches php.ini.");
+                return;
+            }
+
+            await Task.Run(() => PhpService.SaveExtensions(activeVersion, snapshot));
+
+            // Read php.ini back: anything still different was not written.
+            var stillDifferent = await Task.Run(() => PhpService.PendingExtensionChanges(activeVersion, snapshot));
+            var summary = string.Join(", ", pending.Select(x => $"{(x.Enabled ? "enabled" : "disabled")} {x.Name}"));
+
+            await LoadExtensionsAsync();
+            StatusBar.SetStatus(stillDifferent.Count == 0
+                ? $"Saved to php.ini (backup taken): {summary}. Restart PHP for web requests."
+                : $"Saved, but php.ini still differs for: {string.Join(", ", stillDifferent.Select(x => x.Name))}.");
         }
         catch (Exception ex)
         {
             StatusBar.SetStatus($"Error: {ex.Message}");
+        }
+        finally
+        {
+            SaveBtn.IsEnabled = true;
         }
     }
 

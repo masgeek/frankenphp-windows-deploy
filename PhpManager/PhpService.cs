@@ -538,13 +538,21 @@ public static class PhpService
         return ExtensionDiscovery.Build(File.ReadAllText(phpIni), dlls, builtIns);
     }
 
+    /// <summary>What saving would change right now (empty when php.ini already matches).</summary>
+    public static List<ExtensionInfo> PendingExtensionChanges(string version, IEnumerable<ExtensionInfo> desired)
+    {
+        var ini = IniPathFor(version);
+        return File.Exists(ini) ? ExtensionDiscovery.Changes(File.ReadAllText(ini), desired) : [];
+    }
+
     public static void SaveExtensions(string version, List<ExtensionInfo> extensions)
     {
         var phpIni = Path.Combine(BasePath, version, "php.ini");
         if (!File.Exists(phpIni))
             return;
 
-        var content = File.ReadAllText(phpIni);
+        // Clean up any duplicate lines already in the file before applying the new state.
+        var content = PhpIniEditor.DeduplicateExtensions(File.ReadAllText(phpIni));
 
         foreach (var ext in extensions.Where(e => !e.IsBuiltIn))
             content = PhpIniEditor.SetExtensionState(content, ext.Name, ext.Enabled, zend: ext.Kind == ExtensionKind.Zend);
@@ -1794,14 +1802,8 @@ public static class PhpService
         if (!File.Exists(phpIniPath))
             return;
 
-        var content = File.ReadAllText(phpIniPath);
-        var pattern = $@"(?m)^\s*;?\s*extension\s*=\s*(?:php_)?{Regex.Escape(extensionName)}(?:\.dll)?\s*$";
-
-        content = Regex.IsMatch(content, pattern)
-            ? Regex.Replace(content, pattern, $"extension={extensionName}")
-            : content.TrimEnd() + $"\nextension={extensionName}\n";
-
-        PhpIniBackup.Write(phpIniPath, content);
+        // SetExtensionState keeps exactly one line per extension, so installers can never create duplicates.
+        PhpIniBackup.Write(phpIniPath, PhpIniEditor.SetExtensionState(File.ReadAllText(phpIniPath), extensionName, enabled: true, zend: false));
     }
 
     private static string PatchIniValue(string content, string key, string replacement)

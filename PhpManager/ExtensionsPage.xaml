@@ -2,14 +2,28 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:PhpManager">
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Margin="8">
-            <TextBlock Text="Extension Manager" Style="{StaticResource HeaderText}" Margin="0,0,0,16"/>
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
-            <Border Style="{StaticResource CardBorder}">
-                <StackPanel>
-                    <TextBlock Text="Extensions" Style="{StaticResource SubText}" Margin="0,0,0,8"/>
-                    <DataGrid x:Name="ExtensionGrid" AutoGenerateColumns="False" Background="#FFFFFF"
+        <TextBlock Grid.Row="0" Text="Extension Manager" Style="{StaticResource HeaderText}" Margin="0,0,0,16"/>
+
+        <Border Grid.Row="1" Style="{StaticResource CardBorder}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="Extensions" Style="{StaticResource SubText}" Margin="0,0,0,8"/>
+
+                    <!-- the grid scrolls on its own; the action buttons below stay pinned -->
+                    <DataGrid x:Name="ExtensionGrid" Grid.Row="1" VirtualizingPanel.IsVirtualizingWhenGrouping="True"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto" IsReadOnly="False" AutoGenerateColumns="False" Background="#FFFFFF"
                               Foreground="#1F2937" GridLinesVisibility="None" CanUserAddRows="False"
                               HeadersVisibility="Column" RowBackground="#FFFFFF" AlternatingRowBackground="#F9FAFB"
                               BorderBrush="#D1D5DB" BorderThickness="1">
@@ -37,7 +51,7 @@
                             </GroupStyle>
                         </DataGrid.GroupStyle>
                         <DataGrid.Columns>
-                            <DataGridCheckBoxColumn Header="Enabled" Binding="{Binding Enabled}" Width="70">
+                            <DataGridCheckBoxColumn Header="Enabled" Binding="{Binding Enabled, UpdateSourceTrigger=PropertyChanged}" Width="70">
                                 <DataGridCheckBoxColumn.ElementStyle>
                                     <Style TargetType="CheckBox">
                                         <Setter Property="HorizontalAlignment" Value="Center"/>
@@ -68,16 +82,15 @@
                             <DataGridTextColumn Header="Status" Binding="{Binding Status}" IsReadOnly="True" Width="100"/>
                         </DataGrid.Columns>
                     </DataGrid>
-                    <WrapPanel Margin="0,8,0,0">
-                        <Button x:Name="RefreshBtn" Content="Refresh" Style="{StaticResource ActionButton}" Margin="0,0,8,0" Click="LoadExtensions_Click"/>
-                        <Button x:Name="LaravelBtn" Content="Select Laravel Set" Style="{StaticResource ActionButton}" Margin="0,0,8,0" Click="SelectLaravel_Click"/>
-                        <Button x:Name="SaveBtn" Content="Save Changes" Style="{StaticResource ActionButton}" Margin="0,0,8,0" Click="SaveExtensions_Click"/>
-                        <Button x:Name="VerifyBtn" Content="Verify Loaded" Style="{StaticResource ActionButton}" Click="Verify_Click"/>
-                    </WrapPanel>
-                </StackPanel>
-            </Border>
+                <WrapPanel Grid.Row="2" Margin="0,8,0,0">
+                    <Button x:Name="SaveBtn" Content="Save Changes" Style="{StaticResource ActionButton}" Margin="0,0,8,0" Click="SaveExtensions_Click"/>
+                    <Button x:Name="LaravelBtn" Content="Select Laravel Set" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Click="SelectLaravel_Click"/>
+                    <Button x:Name="VerifyBtn" Content="Verify Loaded" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Click="Verify_Click"/>
+                    <Button x:Name="RefreshBtn" Content="Refresh" Style="{StaticResource SecondaryButton}" Click="LoadExtensions_Click"/>
+                </WrapPanel>
+            </Grid>
+        </Border>
 
-            <local:StatusBar x:Name="StatusBar"/>
-        </StackPanel>
-    </ScrollViewer>
+        <local:StatusBar Grid.Row="2" x:Name="StatusBar"/>
+    </Grid>
 </UserControl>

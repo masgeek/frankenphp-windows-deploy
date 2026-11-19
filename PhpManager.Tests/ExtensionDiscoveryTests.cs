@@ -83,3 +83,47 @@ public class ExtensionDiscoveryTests
         Assert.True(list.Single(e => e.Name == "zip").Enabled);
     }
 }
+
+public class ExtensionChangesTests
+{
+    private static ExtensionInfo Ext(string name, bool enabled, ExtensionKind kind = ExtensionKind.Dll) =>
+        new() { Name = name, Enabled = enabled, Kind = kind };
+
+    [Fact]
+    public void DisablingAnEnabledExtension_IsAPendingChange()
+    {
+        var changes = ExtensionDiscovery.Changes("extension=mysqli\nextension=curl\n", [Ext("mysqli", false), Ext("curl", true)]);
+
+        Assert.Equal("mysqli", Assert.Single(changes).Name);
+    }
+
+    [Fact]
+    public void EnablingADisabledOrMissingExtension_IsAPendingChange()
+    {
+        var changes = ExtensionDiscovery.Changes(";extension=zip\n", [Ext("zip", true), Ext("redis", true)]);
+
+        Assert.Equal(["redis", "zip"], changes.Select(c => c.Name).OrderBy(n => n));
+    }
+
+    [Fact]
+    public void MatchingState_AndBuiltIns_AreNotChanges()
+    {
+        var changes = ExtensionDiscovery.Changes(";extension=gd\n", [Ext("gd", false), Ext("json", false, ExtensionKind.BuiltIn)]);
+
+        Assert.Empty(changes);
+    }
+
+    [Fact]
+    public void AfterSaving_NothingIsPending()
+    {
+        var ini = "[PHP]\nextension=mysqli\nzend_extension=opcache\n";
+        var desired = new List<ExtensionInfo> { Ext("mysqli", false), Ext("opcache", false, ExtensionKind.Zend) };
+
+        var saved = ini;
+        foreach (var e in desired)
+            saved = PhpIniEditor.SetExtensionState(saved, e.Name, e.Enabled, zend: e.Kind == ExtensionKind.Zend);
+
+        Assert.Equal(2, ExtensionDiscovery.Changes(ini, desired).Count);
+        Assert.Empty(ExtensionDiscovery.Changes(saved, desired));
+    }
+}
