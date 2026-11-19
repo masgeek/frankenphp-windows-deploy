@@ -22,17 +22,43 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup .NET
+        id: dotnet
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
+      # Build output is keyed on the exact app source + SDK version. A cache is only
+      # saved when the job succeeds, so a hit means this exact source already built
+      # and published cleanly and the whole build can be skipped.
+      # GitHub scopes caches by branch: a cache saved on develop/main is readable by
+      # PRs targeting that branch (and main's cache by everything), but not by
+      # unrelated feature branches.
+      - name: Restore cached build output
+        id: build-cache
+        uses: actions/cache@v4
+        with:
+          path: publish
+          key: publish-${{ runner.os }}-${{ steps.dotnet.outputs.dotnet-version }}-${{ hashFiles('PhpManager/**', '!PhpManager/bin/**', '!PhpManager/obj/**') }}
+
+      # Only needed on a build-cache miss; speeds up restore when only source changed.
+      - name: Cache NuGet packages
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('PhpManager/**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
       - name: Restore
+        if: steps.build-cache.outputs.cache-hit != 'true'
         run: dotnet restore PhpManager/PhpManager.csproj
 
       - name: Build
+        if: steps.build-cache.outputs.cache-hit != 'true'
         run: dotnet build PhpManager/PhpManager.csproj -c Release --no-restore
 
       - name: Publish
+        if: steps.build-cache.outputs.cache-hit != 'true'
         run: >
           dotnet publish PhpManager/PhpManager.csproj
           -c Release
