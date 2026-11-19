@@ -115,3 +115,59 @@ public class PhpIniEditorTests
         Assert.Equal(";extension=pdo\r\nextension=pdo_mysql\r\n", result);
     }
 }
+
+public class PhpStartupWarningExplanationTests
+{
+    [Fact]
+    public void AlreadyLoaded_IsExplainedAsADuplicateLine()
+    {
+        var result = PhpStartupWarnings.ParseLoadFailures("Warning: Module \"pdo_sqlsrv\" is already loaded in Unknown on line 0\r\n");
+
+        Assert.Contains("more than once", result["pdo_sqlsrv"]);
+    }
+
+    [Fact]
+    public void ModuleApiMismatch_IsExplainedAsWrongPhpVersion()
+    {
+        const string output =
+            "PHP Warning:  PHP Startup: pdo_sqlsrv: Unable to initialize module\r\n" +
+            "Module compiled with module API=20220829\r\n" +
+            "PHP    compiled with module API=20230831\r\n" +
+            "These options need to match\r\n in Unknown on line 0\r\n";
+
+        var reason = PhpStartupWarnings.ParseLoadFailures(output)["pdo_sqlsrv"];
+
+        Assert.Contains("20220829", reason);
+        Assert.Contains("20230831", reason);
+        Assert.Contains("different PHP version", reason);
+    }
+
+    [Fact]
+    public void BuildIdMismatch_ExplainsThreadSafety()
+    {
+        const string output =
+            "Warning: PHP Startup: sqlsrv: Unable to initialize module\r\n" +
+            "Module compiled with build ID=API20230831,NTS,VS16\r\n" +
+            "PHP    compiled with build ID=API20230831,TS,VS16\r\n" +
+            "These options need to match\r\n";
+
+        var reason = PhpStartupWarnings.ParseLoadFailures(output)["sqlsrv"];
+
+        Assert.Contains("NTS", reason);
+        Assert.Contains("TS", reason);
+        Assert.Contains("thread-safe", reason);
+    }
+
+    [Fact]
+    public void SeveralProblems_AreAllReported()
+    {
+        const string output =
+            "Warning: Module \"curl\" is already loaded in Unknown on line 0\r\n" +
+            "Warning: PHP Startup: Unable to load dynamic library 'intl' (tried: x (The specified module could not be found)) in Unknown on line 0\r\n";
+
+        var result = PhpStartupWarnings.ParseLoadFailures(output);
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal("The specified module could not be found", result["intl"]);
+    }
+}
